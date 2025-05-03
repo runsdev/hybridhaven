@@ -24,7 +24,7 @@ jobs:
           node-version: 18
 
       - name: Install dependencies
-        run: npm init slidev@latest
+        run: npm install
         working-directory: ./proposal
 
       - name: Build the project
