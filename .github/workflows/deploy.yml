@@ -31,9 +31,11 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+        working-directory: ./proposal
 
       - name: Build
         run: nr build --base /${{github.event.repository.name}}/
+        working-directory: ./proposal
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
