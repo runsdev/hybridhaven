@@ -25,16 +25,17 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Setup @antfu/ni
-        run: npm i -g @antfu/ni
-        working-directory: ./proposal
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: latest
 
       - name: Install dependencies
-        run: npm install
+        run: pnpm install
         working-directory: ./proposal
 
       - name: Build
-        run: nr build --base /${{github.event.repository.name}}/
+        run: pnpm run build --base /${{github.event.repository.name}}/
         working-directory: ./proposal
 
       - name: Setup Pages
