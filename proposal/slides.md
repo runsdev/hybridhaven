@@ -25,9 +25,9 @@ select, merge, and hope that luck is on your side.
 
 <br>
 
-Harun
+Harun (23/514148/TK/56466)
 
-23/514148/TK/56466
+Claude 3.7 Sonnet Thinking (copilot)
 
 
 ---
@@ -53,7 +53,7 @@ transition: slide-up
 level: 2
 ---
 
-tree + sheep with 1 star rarity
+tree + sheep with 1 star rarity (attribution: Google's Gemini AI)
 
 <img src="./img/treesheep.png" alt="Tree" width="400" class="m-auto"/>
 
