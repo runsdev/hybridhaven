@@ -150,9 +150,20 @@ note:
 ---
 transition: slide-up
 level: 2
+layout: quote
+---
+
+# disclaimer
+
+all graph below generated with mermaid + AI for the syntax under supervision
+
+---
+transition: slide-up
+level: 2
 ---
 
 # so i proposed:
+
 ```mermaid
 mindmap
   root((HybridHaven))
@@ -179,6 +190,7 @@ mindmap
       Collectible entities
       Evolving gameplay
 ```
+
 
 ---
 transition: slide-up
