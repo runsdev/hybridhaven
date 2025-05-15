@@ -361,6 +361,16 @@ flowchart LR
 ```
 
 ---
+layout: quote
+transition: slide-left
+level: 2
+---
+
+# Sequence Diagram
+
+*mermaid + AI generated*
+
+---
 transition: slide-up
 level: 2
 ---
@@ -419,67 +429,6 @@ level: 2
 - smart contract: Solidity on Ethereum
 - oracle: Chainlink VRF + Chainlink Functions
 - storage: IPFS + Pinata pinning service
-
----
-transition: slide-left
-level: 2
----
-
-# roadmap
-
-## Week 1: Foundation
-- Smart contract architecture design
-- Set up development environment
-- Create initial Next.js frontend repository
-- Design UI/UX wireframes
-- Research and select Chainlink VRF implementation approach
-- Initial IPFS integration planning
-
----
-transition: slide-left
-level: 2
----
-
-# roadmap
-
-## Week 2: Core Development
-- Implement base smart contracts
-- Develop basic frontend components
-- Create entity data models
-- Set up Google Gemini API integration
-- Configure IPFS and Pinata services
-- Implement wallet connection functionality
-
----
-transition: slide-left
-level: 2
----
-
-# roadmap
-
-## Week 3: Feature Implementation
-- Complete Chainlink VRF integration for randomness
-- Implement entity merging algorithm
-- Develop NFT minting functionality
-- Create AI image generation pipeline
-- Build frontend for entity selection and merging
-- Initial testing on testnet
-
----
-transition: slide-left
-level: 2
----
-
-# roadmap
-
-## Week 4: Finalization
-- Complete end-to-end testing
-- Security audit for smart contracts
-- Optimize gas efficiency
-- Deploy to mainnet
-- Final UI/UX polishing
-- Prepare marketing materials
-- Launch MVP
 
 ---
 layout: quote
