@@ -477,7 +477,6 @@ level: 2
 
 <div class="text-center">
   <h1 class="text-4xl font-bold">thank you!</h1>
-  <p class="text-lg">any questions?</p>
 </div>
 
 <div class="mt-6 flex justify-center space-x-8">
