@@ -415,7 +415,7 @@ level: 2
 # tech stack
 
 - frontend: Next.js + TypeScript + Tailwind CSS
-- backend: Next.js
+- backend: Next.js + ethers.js
 - smart contract: Solidity on Ethereum
 - oracle: Chainlink VRF + Chainlink Functions
 - storage: IPFS + Pinata pinning service
