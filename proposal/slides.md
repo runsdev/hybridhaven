@@ -23,6 +23,12 @@ mdc: true
 
 select, merge, and hope that luck is on your side.
 
+<br>
+
+Harun
+
+23/514148/TK/56466
+
 
 ---
 transition: slide-up
@@ -341,6 +347,53 @@ flowchart LR
   ChainlinkFunctions --- IPFS
   NFTContract --- IPFS
 ```
+
+---
+transition: slide-up
+level: 2
+---
+
+<div class="absolute top-[33%] left-[35%] scale-[250%]">
+```mermaid
+sequenceDiagram
+  actor User
+  participant Frontend as Game Interface
+  participant Game as Game Contract
+  participant NFT as NFT Contract
+  participant VRF as Chainlink VRF
+  participant Functions as Chainlink Functions
+  participant Gemini as Google Gemini API
+  participant Storage as IPFS/Pinata
+
+  User->>Frontend: Connect Wallet
+  Frontend->>Game: Request Starter Entity
+  Game-->>Frontend: Return Starter Entity
+  Frontend-->>User: Display Starter Entity
+  
+  User->>Frontend: Select Two Entities to Merge
+  Frontend->>Game: Submit Merge Request
+  Game->>VRF: Request Random Number
+  VRF-->>Game: Return Verified Random Number
+  Game->>Game: Determine Rarity Based on Randomness
+  
+  Game->>Functions: Request Image Generation
+  Functions->>Gemini: Generate Image (Entity 1 + Entity 2 + Rarity)
+  Gemini-->>Functions: Return Generated Image
+  Functions->>Storage: Store Image
+  Storage-->>Functions: Return Content URI
+  Functions-->>Game: Return Image URI
+  
+  Game->>NFT: Mint New NFT (Metadata + URI)
+  NFT-->>Game: Confirm NFT Minted
+  Game-->>Frontend: Return New Entity Details
+  Frontend-->>User: Display New Hybrid Entity
+  
+  User->>Frontend: View Collection
+  Frontend->>NFT: Query User's NFTs
+  NFT-->>Frontend: Return NFT Collection
+  Frontend-->>User: Display Collection
+```
+</div>
 
 ---
 transition: slide-up
