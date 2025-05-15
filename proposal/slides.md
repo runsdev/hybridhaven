@@ -64,8 +64,8 @@ level: 2
 
 # background
 
-1. use of dynamic NFTs
-2. implementation of randomness
+1. use of NFTs
+2. implementation of randomness in blockchain
 3. AI-generated images (simple and easy assets)
 4. it is a game
 
@@ -157,7 +157,7 @@ level: 2
 mindmap
   root((HybridHaven))
     Gameplay
-      Connect wallet
+      Wallet Connection
       Select & merge entities
       Randomized rarity
       AI-generated images
