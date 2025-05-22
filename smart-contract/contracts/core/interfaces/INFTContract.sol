@@ -6,4 +6,5 @@ interface INFTContract {
     function ownerOf(uint256 tokenId) external view returns (address);
     function totalSupply() external view returns (uint256);
     function tokenURI(uint256 tokenId) external view returns (string memory);
+    function updateTokenURI(uint256 tokenId, string memory newTokenURI) external;
 }
