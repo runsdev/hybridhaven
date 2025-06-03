@@ -9,7 +9,7 @@ export function formatIPFSUrl(ipfsHash: string): string {
 }
 
 export function calculateRarity(randomValue: bigint): number {
-  const roll = randomValue;
+  const roll = randomValue % 10000n + 1n;
 
   if (roll <= BigInt(10)) return 5; //  0.1% chance for 5-star
   if (roll <= BigInt(1000)) return 4; //  9.9% chance for 4-star

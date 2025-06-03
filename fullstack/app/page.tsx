@@ -4,6 +4,7 @@ import { useGame } from "@/hooks/useGame";
 import { Entity } from "@/types/game";
 import { useState, useEffect } from "react";
 import { formatIPFSUrl } from "@/lib/utils";
+import HatchTimerComponent from "@/components/HatchTimer";
 
 export default function HybridHaven() {
   const {
@@ -11,6 +12,7 @@ export default function HybridHaven() {
     mergeInProgress,
     finalizeInProgress,
     autoFinalizingRequests,
+    hatchTimers,
     connectWallet,
     claimStarterEntity,
     requestMerge,
@@ -20,7 +22,9 @@ export default function HybridHaven() {
     addNFTToWallet,
   } = useGame();
 
-  const [selectedEntities, setSelectedEntities] = useState<number[]>([]);
+  const [selectedEntities, setSelectedEntities] = useState<(string | number)[]>(
+    []
+  );
   const [showSuccess, setShowSuccess] = useState<string | null>(null);
   const [selectedEntityForDetails, setSelectedEntityForDetails] =
     useState<Entity | null>(null);
@@ -63,22 +67,23 @@ export default function HybridHaven() {
     checkStarterStatus();
   }, [gameState.connected, gameState.address, gameState.entities]);
 
-  const handleEntitySelect = (tokenId: number) => {
+  const handleEntitySelect = (identifier: string | number) => {
     setSelectedEntities((prev) => {
-      if (prev.includes(tokenId)) {
-        return prev.filter((id) => id !== tokenId);
+      if (prev.includes(identifier)) {
+        return prev.filter((id) => id !== identifier);
       }
       if (prev.length < 2) {
-        return [...prev, tokenId];
+        return [...prev, identifier];
       }
-      return [prev[1], tokenId]; // Replace first selection
+      return [prev[1], identifier]; // Replace first selection
     });
   };
 
   const handleEntityClick = (entity: Entity) => {
     if (isMergeMode) {
-      // If in merge mode, handle selection
-      handleEntitySelect(entity.tokenId);
+      // If in merge mode, handle selection using proper identifier
+      const identifier = entity.isStarter ? entity.name : entity.tokenId;
+      handleEntitySelect(identifier);
     } else {
       // If not in merge mode, show details modal
       setSelectedEntityForDetails(entity);
@@ -94,7 +99,23 @@ export default function HybridHaven() {
   const handleMerge = async () => {
     if (selectedEntities.length === 2 && !mergeInProgress) {
       try {
-        await requestMerge(selectedEntities[0], selectedEntities[1]);
+        // Find the actual entity objects from the selected entity identifiers
+        const entity1 = gameState.entities.find((e) =>
+          e.isStarter
+            ? e.name === selectedEntities[0]
+            : e.tokenId === selectedEntities[0]
+        );
+        const entity2 = gameState.entities.find((e) =>
+          e.isStarter
+            ? e.name === selectedEntities[1]
+            : e.tokenId === selectedEntities[1]
+        );
+
+        if (!entity1 || !entity2) {
+          throw new Error("Selected entities not found");
+        }
+
+        await requestMerge(entity1, entity2);
         setSelectedEntities([]);
         setShowSuccess(
           "🚀 Merge request submitted! Your hybrid is being created automatically and will appear shortly."
@@ -453,9 +474,13 @@ export default function HybridHaven() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {gameState.entities.map((entity) => (
+              {gameState.entities.map((entity, index) => (
                 <EntityCard
-                  key={entity.tokenId}
+                  key={
+                    entity.isStarter
+                      ? `starter-${entity.name}-${index}`
+                      : entity.tokenId
+                  }
                   entity={entity}
                   selected={selectedEntities.includes(entity.tokenId)}
                   onSelect={() => handleEntitySelect(entity.tokenId)}
@@ -471,69 +496,95 @@ export default function HybridHaven() {
           )}
         </div>
 
-        {/* Pending Requests */}
-        {gameState.pendingRequests.length > 0 && (
-          <div className="mt-8 bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-6">
-            <h3 className="text-xl font-bold text-white mb-4">
-              ⏳ Processing Merges
+        {/* Hatch Timers - Active VRF Requests */}
+        {Array.from(hatchTimers.values()).length > 0 && (
+          <div className="mt-8 space-y-4">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+              🥚 Hatching in Progress
+              <span className="ml-2 text-sm text-gray-400 font-normal">
+                ({Array.from(hatchTimers.values()).length} active)
+              </span>
             </h3>
-            <div className="space-y-4">
-              <p className="text-yellow-200 text-sm mb-4">
-                🚀 These merges are being completed automatically! Your new
-                hybrid creatures will appear in your collection shortly.
-              </p>
-              <div className="grid gap-4">
-                {gameState.pendingRequests.map((requestId) => (
-                  <div
-                    key={requestId}
-                    className="bg-black/30 border border-yellow-500/20 rounded-lg p-4 flex items-center justify-between"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="text-2xl animate-pulse">🔮</div>
-                      <div>
-                        <div className="text-white font-medium">
-                          Merge Request #{requestId}
-                        </div>
-                        <div className="text-yellow-300 text-sm">
-                          {autoFinalizingRequests.has(requestId)
-                            ? "🤖 Auto-completing..."
-                            : "⏳ Queued for processing..."}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      {autoFinalizingRequests.has(requestId) ? (
-                        <div className="flex items-center text-green-300 text-sm">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-300 mr-2"></div>
-                          Completing...
-                        </div>
-                      ) : (
-                        <div className="text-blue-300 text-sm">
-                          ⏳ Waiting...
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t border-yellow-500/20">
-                <div className="text-yellow-200 text-sm">
-                  ✨ Automatic completion: Your hybrids will be minted and
-                  appear in your collection automatically!
-                </div>
-                <button
-                  onClick={refreshData}
-                  disabled={gameState.loading}
-                  className="text-yellow-300 hover:text-yellow-100 text-sm underline"
-                >
-                  {gameState.loading
-                    ? "Refreshing..."
-                    : "🔄 Refresh Collection"}
-                </button>
-              </div>
+            <div className="grid gap-4">
+              {Array.from(hatchTimers.values()).map((timer) => (
+                <HatchTimerComponent
+                  key={timer.requestId}
+                  requestId={timer.requestId}
+                  entity1Name={timer.entity1Name}
+                  entity2Name={timer.entity2Name}
+                  startTime={timer.startTime}
+                  stage={timer.stage}
+                  onComplete={timer.onComplete}
+                />
+              ))}
             </div>
           </div>
         )}
+
+        {/* Legacy Pending Requests (fallback for requests without hatch timers) */}
+        {gameState.pendingRequests.length > 0 &&
+          Array.from(hatchTimers.values()).length === 0 && (
+            <div className="mt-8 bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-6">
+              <h3 className="text-xl font-bold text-white mb-4">
+                ⏳ Processing Merges
+              </h3>
+              <div className="space-y-4">
+                <p className="text-yellow-200 text-sm mb-4">
+                  🚀 These merges are being completed automatically! Your new
+                  hybrid creatures will appear in your collection shortly.
+                </p>
+                <div className="grid gap-4">
+                  {gameState.pendingRequests.map((requestId) => (
+                    <div
+                      key={requestId}
+                      className="bg-black/30 border border-yellow-500/20 rounded-lg p-4 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className="text-2xl animate-pulse">🔮</div>
+                        <div>
+                          <div className="text-white font-medium">
+                            Merge Request #{requestId}
+                          </div>
+                          <div className="text-yellow-300 text-sm">
+                            {autoFinalizingRequests.has(requestId)
+                              ? "🤖 Auto-completing..."
+                              : "⏳ Queued for processing..."}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        {autoFinalizingRequests.has(requestId) ? (
+                          <div className="flex items-center text-green-300 text-sm">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-300 mr-2"></div>
+                            Completing...
+                          </div>
+                        ) : (
+                          <div className="text-blue-300 text-sm">
+                            ⏳ Waiting...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between pt-4 border-t border-yellow-500/20">
+                  <div className="text-yellow-200 text-sm">
+                    ✨ Automatic completion: Your hybrids will be minted and
+                    appear in your collection automatically!
+                  </div>
+                  <button
+                    onClick={refreshData}
+                    disabled={gameState.loading}
+                    className="text-yellow-300 hover:text-yellow-100 text-sm underline"
+                  >
+                    {gameState.loading
+                      ? "Refreshing..."
+                      : "🔄 Refresh Collection"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
         {/* Entity Details Modal */}
         {selectedEntityForDetails && (
@@ -715,60 +766,61 @@ function EntityDetailsModal({
   addNFTToWallet: (tokenId: number, entity: Entity) => Promise<void>;
 }) {
   const [ipfsMetadata, setIpfsMetadata] = useState<any>(null);
+  const [openSeaMetadata, setOpenSeaMetadata] = useState<any>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
 
-  // Fetch IPFS key-value metadata when modal opens
+  // Fetch both IPFS and OpenSea metadata when modal opens
   useEffect(() => {
-    const fetchIPFSKeyValueMetadata = async () => {
-      // For starter entities or entities without imageURI, skip fetching
-      if (!entity.imageURI || entity.isStarter) {
-        return;
-      }
+    const fetchMetadata = async () => {
+      if (entity.isStarter) return;
 
       setMetadataLoading(true);
       setMetadataError(null);
 
       try {
-        // Extract IPFS hash from imageURI
-        const ipfsHash = entity.imageURI.replace("ipfs://", "");
+        // Fetch OpenSea-compatible metadata
+        if (entity.tokenId > 0) {
+          try {
+            const openSeaResponse = await fetch(
+              `/api/metadata/${entity.tokenId}`
+            );
+            const openSeaData = await openSeaResponse.json();
+            if (!openSeaData.error) {
+              setOpenSeaMetadata(openSeaData);
+            }
+          } catch (error) {
+            console.warn("Could not fetch OpenSea metadata:", error);
+          }
+        }
 
-        // Fetch metadata from key-value pairs using the image CID
-        const response = await fetch(
-          `/api/game/metadata?cid=${encodeURIComponent(ipfsHash)}`
-        );
-        const data = await response.json();
-
-        if (data.success) {
-          setIpfsMetadata(data.metadata);
-        } else {
-          setMetadataError(data.error || "Failed to load key-value metadata");
+        // Fetch IPFS key-value metadata if available
+        if (entity.imageURI) {
+          try {
+            const ipfsHash = entity.imageURI.replace("ipfs://", "");
+            const ipfsResponse = await fetch(
+              `/api/game/metadata?cid=${encodeURIComponent(ipfsHash)}`
+            );
+            const ipfsData = await ipfsResponse.json();
+            if (ipfsData.success) {
+              setIpfsMetadata(ipfsData.metadata);
+            }
+          } catch (error) {
+            console.warn("Could not fetch IPFS metadata:", error);
+          }
         }
       } catch (error: any) {
-        console.error("Error fetching IPFS key-value metadata:", error);
-        setMetadataError("Failed to load metadata from IPFS key-values");
+        console.error("Error fetching metadata:", error);
+        setMetadataError("Failed to load metadata");
       } finally {
         setMetadataLoading(false);
       }
     };
 
-    fetchIPFSKeyValueMetadata();
-  }, [entity.imageURI, entity.isStarter]);
+    fetchMetadata();
+  }, [entity.imageURI, entity.isStarter, entity.tokenId]);
 
   const getRarityStars = (rarity: number) => "⭐".repeat(rarity);
-
-  const getRarityColor = (rarity: number) => {
-    const colors = {
-      1: "text-gray-400 border-gray-400",
-      2: "text-green-400 border-green-400",
-      3: "text-blue-400 border-blue-400",
-      4: "text-purple-400 border-purple-400",
-      5: "text-yellow-400 border-yellow-400",
-    };
-    return (
-      colors[rarity as keyof typeof colors] || "text-gray-400 border-gray-400"
-    );
-  };
 
   const getRarityName = (rarity: number) => {
     const names = {
@@ -791,395 +843,205 @@ function EntityDetailsModal({
     });
   };
 
-  // Use IPFS metadata description if available, fallback to entity description
-  const displayDescription = ipfsMetadata?.description || entity.description;
-  const displayImage = ipfsMetadata?.image || entity.imageURI;
+  // Use OpenSea metadata if available, fallback to IPFS or entity data
+  const displayMetadata = openSeaMetadata || ipfsMetadata;
+  const displayDescription = displayMetadata?.description || entity.description;
+  const displayImage = displayMetadata?.image || entity.imageURI;
+
+  // OpenSea marketplace URL
+  const openSeaUrl =
+    entity.tokenId > 0
+      ? `https://testnets.opensea.io/assets/sepolia/${process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS}/${entity.tokenId}`
+      : null;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gradient-to-br from-gray-900 to-black border border-gray-700 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <h2 className="text-2xl font-bold text-white flex items-center">
-            📋 NFT Details
-            {metadataLoading && (
-              <div className="ml-3 animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
-            )}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl transition-colors"
-          >
-            ✕
-          </button>
-        </div>
-
+      <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 space-y-6">
-          {/* Main Entity Info */}
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Image */}
-            <div className="flex-shrink-0">
-              <div className="w-64 h-64 bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg flex items-center justify-center overflow-hidden">
-                {displayImage && displayImage !== "" ? (
-                  <img
-                    src={formatIPFSUrl(displayImage)}
-                    alt={entity.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                      const fallback = e.currentTarget
-                        .nextElementSibling as HTMLElement;
-                      if (fallback) fallback.style.display = "flex";
-                    }}
-                  />
-                ) : null}
-                {entity.isStarter && (
-                  <div className="text-4xl flex items-center justify-center w-full h-full">
-                    {getStarterEmoji(entity.name)}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Basic Info */}
-            <div className="flex-1 space-y-4">
-              <div>
-                <h3 className="text-3xl font-bold text-white mb-2">
-                  {ipfsMetadata?.name || entity.name}
-                </h3>
-                <div className="flex items-center space-x-3">
-                  <span className="text-gray-300">Token ID:</span>
-                  <span className="text-white font-mono">
-                    #{entity.tokenId}
-                  </span>
-                </div>
-              </div>
-
-              {/* Rarity */}
-              <div
-                className={`inline-flex items-center space-x-2 px-4 py-2 rounded-lg border ${getRarityColor(
-                  entity.rarity
-                )} bg-black/20`}
-              >
-                <span className="text-2xl">
-                  {getRarityStars(entity.rarity)}
-                </span>
-                <span className="font-bold">
-                  {getRarityName(entity.rarity)}
-                </span>
-              </div>
-
-              {/* Type */}
-              <div className="space-y-2">
-                <div className="text-gray-300">Type:</div>
-                {entity.isStarter ? (
-                  <div className="inline-flex items-center px-3 py-1 bg-green-900/30 border border-green-500/30 rounded-lg text-green-300">
-                    🌱 Starter Entity
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center px-3 py-1 bg-purple-900/30 border border-purple-500/30 rounded-lg text-purple-300">
-                    🔮 Hybrid Entity
-                  </div>
-                )}
-              </div>
-
-              {/* Parents (for hybrids) */}
-              {!entity.isStarter && entity.parent1 && entity.parent2 && (
-                <div className="space-y-2">
-                  <div className="text-gray-300">Created from:</div>
-                  <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3">
-                    <div className="text-blue-300 font-medium">
-                      {entity.parent1} + {entity.parent2}
-                    </div>
-                    <div className="text-blue-200 text-sm mt-1">
-                      This hybrid was created by merging two entities
-                    </div>
-                  </div>
-                </div>
+          {/* Header */}
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold text-white flex items-center space-x-2">
+                <span>{entity.name}</span>
+                <span className="text-lg">{getRarityStars(entity.rarity)}</span>
+              </h2>
+              <p className="text-gray-400">
+                {getRarityName(entity.rarity)} •{" "}
+                {entity.isStarter ? "Starter" : "Hybrid"} Entity
+              </p>
+              {entity.tokenId > 0 && (
+                <p className="text-sm text-gray-500">
+                  Token ID: #{entity.tokenId}
+                </p>
               )}
             </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors text-2xl"
+            >
+              ✕
+            </button>
           </div>
 
-          {/* Enhanced Description from IPFS Key-Values */}
-          {ipfsMetadata?.description && (
-            <div className="space-y-2">
-              <h4 className="text-lg font-semibold text-white flex items-center">
-                📖 Description
-                <span className="ml-2 text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
-                  ✅ IPFS Key-Values
-                </span>
-              </h4>
-              <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
-                <p className="text-gray-200 leading-relaxed">
-                  {ipfsMetadata.description}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Add to MetaMask Button */}
-          <div className="space-y-2">
-            <h4 className="text-lg font-semibold text-white flex items-center">
-              🦊 MetaMask Integration
-            </h4>
-            <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
-              <p className="text-blue-200 text-sm mb-3">
-                Add this NFT to your MetaMask wallet for easy viewing and
-                management.
-              </p>
-              <button
-                onClick={() => addNFTToWallet(entity.tokenId, entity)}
-                className="bg-gradient-to-r from-orange-600 to-blue-600 hover:from-orange-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center space-x-2"
-              >
-                <span>🦊</span>
-                <span>Add to MetaMask</span>
-              </button>
-              <p className="text-xs text-gray-400 mt-2">
-                💡 This will prompt MetaMask to watch this NFT in your wallet
-              </p>
-            </div>
-          </div>
-
-          {/* IPFS Key-Value Metadata Display */}
-          {ipfsMetadata && (
-            <div className="space-y-2">
-              <h4 className="text-lg font-semibold text-white flex items-center">
-                🗂️ IPFS Key-Value Metadata
-                <span className="ml-2 text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
-                  ✅ Stored with Image CID
-                </span>
-              </h4>
-              <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4 space-y-4">
-                {/* Core Key-Value Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Entity Name */}
-                  {ipfsMetadata.name && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">Name</div>
-                      <div className="text-white font-medium">
-                        {ipfsMetadata.name}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Rarity */}
-                  {ipfsMetadata.rarity && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">Rarity</div>
-                      <div className="text-white font-medium flex items-center">
-                        <span className="mr-2">
-                          {"⭐".repeat(ipfsMetadata.rarity)}
-                        </span>
-                        <span>{ipfsMetadata.rarity} Star</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Parent 1 */}
-                  {ipfsMetadata.parent1 && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">Parent 1</div>
-                      <div className="text-white font-medium">
-                        {ipfsMetadata.parent1}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Parent 2 */}
-                  {ipfsMetadata.parent2 && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">Parent 2</div>
-                      <div className="text-white font-medium">
-                        {ipfsMetadata.parent2}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Type */}
-                  {ipfsMetadata.type && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">Type</div>
-                      <div className="text-white font-medium">
-                        {ipfsMetadata.type}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Game */}
-                  {ipfsMetadata.game && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">Game</div>
-                      <div className="text-white font-medium">
-                        {ipfsMetadata.game}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* External URL */}
-                  {ipfsMetadata.external_url && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">External URL</div>
-                      <div className="text-white font-medium">
-                        <a
-                          href={ipfsMetadata.external_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 underline break-all"
-                        >
-                          {ipfsMetadata.external_url}
-                        </a>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Background Color */}
-                  {ipfsMetadata.background_color && (
-                    <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                      <div className="text-gray-400 text-sm">
-                        Background Color
-                      </div>
-                      <div className="text-white font-medium flex items-center space-x-2">
-                        <div
-                          className="w-4 h-4 rounded border border-gray-600"
-                          style={{
-                            backgroundColor: ipfsMetadata.background_color,
-                          }}
-                        ></div>
-                        <span className="font-mono">
-                          {ipfsMetadata.background_color}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Enhanced IPFS Attributes from Key-Values */}
-          {ipfsMetadata?.attributes &&
-            Array.isArray(ipfsMetadata.attributes) && (
-              <div className="space-y-2">
-                <h4 className="text-lg font-semibold text-white flex items-center">
-                  🏷️ Entity Attributes
-                  <span className="ml-2 text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
-                    ✅ IPFS Key-Values
-                  </span>
-                  <span className="ml-2 text-xs text-blue-400 bg-blue-900/20 px-2 py-1 rounded">
-                    {ipfsMetadata.attributes.length} traits
-                  </span>
-                </h4>
-                <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {ipfsMetadata.attributes.map((attr: any, index: number) => (
-                      <div
-                        key={index}
-                        className="bg-black/30 rounded-lg p-3 border border-gray-700 hover:border-blue-500/50 transition-colors"
-                      >
-                        <div className="text-gray-400 text-sm font-medium">
-                          {attr.trait_type || "Trait"}
-                        </div>
-                        <div className="text-white font-medium mt-1">
-                          {typeof attr.value === "number" ? (
-                            <span className="font-mono">{attr.value}</span>
-                          ) : (
-                            String(attr.value)
-                          )}
-                          {attr.max_value && (
-                            <span className="text-gray-400 text-sm ml-1">
-                              / {attr.max_value}
-                            </span>
-                          )}
-                        </div>
-                        {attr.display_type && (
-                          <div className="text-xs text-blue-300 mt-1 bg-blue-900/20 px-2 py-1 rounded">
-                            {attr.display_type}
-                          </div>
-                        )}
-                        {typeof attr.value === "number" &&
-                          attr.display_type === "boost_percentage" && (
-                            <div className="text-xs text-green-300 mt-1">
-                              +{attr.value}% boost
-                            </div>
-                          )}
-                        {typeof attr.value === "number" &&
-                          attr.display_type === "boost_number" && (
-                            <div className="text-xs text-green-300 mt-1">
-                              +{attr.value} points
-                            </div>
-                          )}
-                      </div>
-                    ))}
-                  </div>
+          {/* Image */}
+          <div className="aspect-square bg-gray-800 rounded-lg overflow-hidden">
+            {displayImage ? (
+              <img
+                src={
+                  displayImage.startsWith("ipfs://")
+                    ? `https://gateway.pinata.cloud/ipfs/${displayImage.replace(
+                        "ipfs://",
+                        ""
+                      )}`
+                    : displayImage
+                }
+                alt={entity.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.src = "/placeholder-entity.png";
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-500">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">🔮</div>
+                  <p>No image available</p>
                 </div>
               </div>
             )}
+          </div>
 
-          {/* IPFS Technical Details */}
-          {ipfsMetadata && (
+          {/* Description */}
+          {displayDescription && (
             <div className="space-y-2">
+              <h4 className="text-lg font-semibold text-white">Description</h4>
+              <p className="text-gray-300 leading-relaxed">
+                {displayDescription}
+              </p>
+            </div>
+          )}
+
+          {/* OpenSea Metadata Display */}
+          {openSeaMetadata && (
+            <div className="space-y-4">
               <h4 className="text-lg font-semibold text-white flex items-center">
-                🔧 IPFS Storage Details
-                <span className="ml-2 text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
-                  ✅ Key-Value Store
+                🌊 OpenSea Metadata
+                <span className="ml-2 text-xs text-blue-400 bg-blue-900/20 px-2 py-1 rounded">
+                  ✅ Compatible
                 </span>
               </h4>
-              <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                    <div className="text-gray-400 text-sm">Image CID</div>
-                    <div className="text-white font-mono text-sm break-all">
-                      {entity.imageURI?.replace("ipfs://", "")}
+
+              {/* Attributes Grid */}
+              {openSeaMetadata.attributes &&
+                openSeaMetadata.attributes.length > 0 && (
+                  <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4">
+                    <h5 className="text-md font-medium text-white mb-3">
+                      Traits & Properties
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {openSeaMetadata.attributes.map(
+                        (attr: any, index: number) => (
+                          <div
+                            key={index}
+                            className="bg-black/30 rounded-lg p-3 border border-gray-700"
+                          >
+                            <div className="text-xs text-gray-400 uppercase tracking-wide">
+                              {attr.trait_type}
+                            </div>
+                            <div className="text-white font-medium mt-1">
+                              {attr.display_type === "date"
+                                ? new Date(
+                                    attr.value * 1000
+                                  ).toLocaleDateString()
+                                : attr.value}
+                              {attr.max_value && ` / ${attr.max_value}`}
+                            </div>
+                          </div>
+                        )
+                      )}
                     </div>
                   </div>
-                  <div className="bg-black/30 rounded-lg p-3 border border-gray-700">
-                    <div className="text-gray-400 text-sm">Storage Method</div>
-                    <div className="text-white font-medium">
-                      IPFS Key-Value Pairs with Image
-                    </div>
-                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Entity Details */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-white">Entity Details</h4>
+            <div className="bg-gray-800/50 border border-gray-600 rounded-lg p-4 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-gray-400">Rarity:</span>
+                  <span className="ml-2 text-white font-medium">
+                    {getRarityName(entity.rarity)}{" "}
+                    {getRarityStars(entity.rarity)}
+                  </span>
                 </div>
-                <div className="mt-3 text-xs text-blue-300 bg-blue-900/20 p-3 rounded">
-                  📦 This metadata is stored directly with the image file on
-                  IPFS using key-value pairs, ensuring the data and image are
-                  always linked together.
+                <div>
+                  <span className="text-gray-400">Type:</span>
+                  <span className="ml-2 text-white font-medium">
+                    {entity.isStarter ? "Starter Entity" : "Hybrid Entity"}
+                  </span>
+                </div>
+                {!entity.isStarter && entity.parent1 && entity.parent2 && (
+                  <>
+                    <div>
+                      <span className="text-gray-400">Parent 1:</span>
+                      <span className="ml-2 text-white font-medium">
+                        {entity.parent1}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400">Parent 2:</span>
+                      <span className="ml-2 text-white font-medium">
+                        {entity.parent2}
+                      </span>
+                    </div>
+                  </>
+                )}
+                <div>
+                  <span className="text-gray-400">Created:</span>
+                  <span className="ml-2 text-white font-medium">
+                    {formatDate(entity.createdAt)}
+                  </span>
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Raw Key-Value Data (for debugging/technical users) */}
-          {ipfsMetadata && (
-            <div className="space-y-2">
-              <h4 className="text-lg font-semibold text-white flex items-center">
-                🔧 Raw Key-Value Data
-                <span className="ml-2 text-xs text-green-400 bg-green-900/20 px-2 py-1 rounded">
-                  ✅ IPFS
-                </span>
-              </h4>
-              <details className="bg-gray-800/50 border border-gray-600 rounded-lg">
-                <summary className="p-4 cursor-pointer text-gray-300 hover:text-white transition-colors">
-                  <span className="text-sm">
-                    🔍 View Raw Key-Value Data (click to expand)
-                  </span>
-                </summary>
-                <div className="px-4 pb-4">
-                  <pre className="bg-black/50 border border-gray-700 rounded-lg p-4 text-xs text-gray-300 overflow-auto max-h-64 font-mono">
-                    {JSON.stringify(ipfsMetadata, null, 2)}
-                  </pre>
-                </div>
-              </details>
-            </div>
-          )}
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            {entity.tokenId > 0 && (
+              <>
+                <button
+                  onClick={() => addNFTToWallet(entity.tokenId, entity)}
+                  className="bg-gradient-to-r from-orange-600 to-blue-600 hover:from-orange-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center justify-center space-x-2"
+                >
+                  <span>🦊</span>
+                  <span>Add to MetaMask</span>
+                </button>
+                {openSeaUrl && (
+                  <a
+                    href={openSeaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center justify-center space-x-2"
+                  >
+                    <span>🌊</span>
+                    <span>View on OpenSea</span>
+                  </a>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Metadata Loading/Error States */}
           {metadataLoading && !entity.isStarter && (
             <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-4">
               <div className="flex items-center space-x-3">
                 <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
-                <span className="text-blue-200">
-                  Loading IPFS key-value metadata...
-                </span>
+                <span className="text-blue-200">Loading metadata...</span>
               </div>
             </div>
           )}
@@ -1196,11 +1058,43 @@ function EntityDetailsModal({
           {entity.isStarter && (
             <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
               <div className="text-green-200">
-                <strong>🌱 Starter Entity:</strong> This is a foundational
-                entity that doesn't have IPFS key-value metadata. It exists as a
-                base component for creating hybrid creatures.
+                <strong>💡 Starter Entity:</strong> This is a virtual starter
+                entity. Merge it with another entity to create a real NFT!
               </div>
             </div>
+          )}
+
+          {/* Raw Metadata (for debugging) */}
+          {(openSeaMetadata || ipfsMetadata) && (
+            <details className="bg-gray-800/50 border border-gray-700 rounded-lg">
+              <summary className="p-4 cursor-pointer text-gray-300 hover:text-white transition-colors">
+                <span className="text-sm">
+                  🔍 View Raw Metadata (click to expand)
+                </span>
+              </summary>
+              <div className="px-4 pb-4 space-y-4">
+                {openSeaMetadata && (
+                  <div>
+                    <h6 className="text-sm font-medium text-blue-400 mb-2">
+                      OpenSea Metadata:
+                    </h6>
+                    <pre className="bg-black/50 border border-gray-700 rounded-lg p-4 text-xs text-gray-300 overflow-auto max-h-64 font-mono">
+                      {JSON.stringify(openSeaMetadata, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {ipfsMetadata && (
+                  <div>
+                    <h6 className="text-sm font-medium text-green-400 mb-2">
+                      IPFS Key-Value Metadata:
+                    </h6>
+                    <pre className="bg-black/50 border border-gray-700 rounded-lg p-4 text-xs text-gray-300 overflow-auto max-h-64 font-mono">
+                      {JSON.stringify(ipfsMetadata, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </details>
           )}
         </div>
       </div>

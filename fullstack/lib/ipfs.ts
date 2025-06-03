@@ -14,64 +14,104 @@ export async function generateAndUploadHybridImage(
   entity2Name: string,
   rarity: number
 ): Promise<{ imageURI: string; metadata: any }> {
-  validateIPFSEnvironment();
-
   try {
-    // Generate hybrid creature description using Gemini
-    const description = await generateHybridDescription(
-      entity1Name,
-      entity2Name,
-      rarity
-    );
+    const description = await generateHybridDescription(entity1Name, entity2Name, rarity);
+    const hybridName = await generateHybridName(entity1Name, entity2Name, description);
 
-    // Generate hybrid name
-    const hybridName = await generateHybridName(
-      entity1Name,
-      entity2Name,
-      description
-    );
-
-    // For now, we'll create a placeholder image with the description
-    // In a full implementation, you'd use an image generation service
-    const imageData = await createPlaceholderImage(
-      entity1Name,
-      entity2Name,
-      rarity,
-      description
-    );
-
-    // Create metadata object for key-value store
+    // Enhanced OpenSea-compatible metadata structure
     const metadata = {
       name: hybridName,
-      description: await generateShortHybridDescription(
-        entity1Name,
-        entity2Name,
-        rarity
-      ),
-      rarity: rarity,
+      description,
+      image: "", // Will be set after upload
+      external_url: "https://hybridhaven.runs.my.id",
+      background_color: getRarityHexColor(rarity),
+      attributes: [
+        {
+          trait_type: "Rarity",
+          value: getRarityDescriptor(rarity)
+        },
+        {
+          trait_type: "Star Rating", 
+          value: rarity,
+          max_value: 5,
+          display_type: "number"
+        },
+        {
+          trait_type: "Type",
+          value: "Hybrid"
+        },
+        {
+          trait_type: "Parent 1",
+          value: entity1Name
+        },
+        {
+          trait_type: "Parent 2", 
+          value: entity2Name
+        },
+        {
+          trait_type: "Generation",
+          value: "F1",
+          display_type: "string"
+        },
+        {
+          trait_type: "Created Date",
+          value: Math.floor(Date.now() / 1000),
+          display_type: "date"
+        }
+      ],
+      // OpenSea collection information
+      collection: {
+        name: "HybridHaven Entities",
+        family: "HybridHaven"
+      },
+      // Additional OpenSea fields
+      animation_url: null,
+      youtube_url: null,
+      // Game-specific metadata
+      game: "HybridHaven",
+      version: "1.0"
+    };
+
+    // Generate image using Google AI
+    let imageBuffer: Buffer;
+    try {
+      const prompt = `Create a fantasy creature that is a hybrid fusion of ${entity1Name} and ${entity2Name}. 
+        The creature should be ${getRarityDescriptor(rarity)} tier quality with magical ethereal effects. 
+        Style: digital art, fantasy game character, detailed, vibrant colors, magical aura.
+        Background: mystical environment suitable for a ${getRarityDescriptor(rarity)} rarity creature.`;
+
+      imageBuffer = await createPlaceholderImage(entity1Name, entity2Name, rarity, description);
+    } catch (aiError) {
+      console.warn("AI image generation failed, using fallback:", aiError);
+      imageBuffer = await createSVGFallback(entity1Name, entity2Name, rarity, description);
+    }
+
+    const filename = sanitizeFilename(`${hybridName}-${Date.now()}.png`);
+    
+    // Upload with enhanced OpenSea-compatible metadata as key-values
+    const imageURI = await uploadImageWithMetadata(imageBuffer, filename, {
+      name: metadata.name,
+      description: metadata.description,
+      rarity: rarity.toString(),
       parent1: entity1Name,
       parent2: entity2Name,
       type: "Hybrid",
-      external_url: "https://hybridhaven.runs.my.id",
-      background_color: getRarityColor(rarity),
-      created_at: new Date().toISOString(),
-    };
+      background_color: metadata.background_color,
+      external_url: metadata.external_url,
+      game: "HybridHaven",
+      generation: "F1",
+      created_at: new Date().toISOString()
+    });
 
-    // Create shorter, sanitized filename
-    const sanitizedName = sanitizeFilename(hybridName);
-    const shortFilename = `${sanitizedName}_${rarity}star.png`;
+    // Update metadata with final image URI
+    metadata.image = imageURI.startsWith('ipfs://') 
+      ? `https://gateway.pinata.cloud/ipfs/${imageURI.replace('ipfs://', '')}`
+      : imageURI;
 
-    // Upload image to IPFS with metadata as key-value pairs
-    const imageURI = await uploadImageWithMetadata(
-      imageData,
-      shortFilename,
-      metadata
-    );
-
-    return { imageURI, metadata: { ...metadata, imageURI } };
+    return { imageURI, metadata };
   } catch (error) {
-    console.error("Error generating and uploading hybrid image:", error);
-    throw new Error("Failed to generate hybrid creature");
+    console.error("Error generating hybrid image and metadata:", error);
+    throw new Error("Failed to generate hybrid content");
   }
 }
 
@@ -129,58 +169,58 @@ async function generateHybridDescription(
   }
 }
 
-async function generateShortHybridDescription(
-  entity1: string,
-  entity2: string,
-  rarity: number
-): Promise<string> {
-  try {
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY || "",
-    });
+// async function generateShortHybridDescription(
+//   entity1: string,
+//   entity2: string,
+//   rarity: number
+// ): Promise<string> {
+//   try {
+//     const ai = new GoogleGenAI({
+//       apiKey: process.env.GEMINI_API_KEY || "",
+//     });
 
-    const config = {
-      responseMimeType: "text/plain",
-    };
+//     const config = {
+//       responseMimeType: "text/plain",
+//     };
 
-    const model = "gemini-2.0-flash";
+//     const model = "gemini-2.0-flash";
 
-    const contents = [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Create a short, engaging description for a hybrid creature that combines "${entity1}" and "${entity2}". 
-            This is a ${rarity}-star rarity creature (1=common, 5=legendary). 
+//     const contents = [
+//       {
+//         role: "user",
+//         parts: [
+//           {
+//             text: `Create a short, engaging description for a hybrid creature that combines "${entity1}" and "${entity2}". 
+//             This is a ${rarity}-star rarity creature (1=common, 5=legendary). 
             
-            The description MUST be less than 200 characters and include:
-            - Unique traits from both parent entities
-            - A hint of its mystical or elemental nature
+//             The description MUST be less than 200 characters and include:
+//             - Unique traits from both parent entities
+//             - A hint of its mystical or elemental nature
             
-            Keep it concise and suitable for a fantasy NFT game. Don't mention NFT or blockchain and don't use any markdown syntax.`,
-          },
-        ],
-      },
-    ];
+//             Keep it concise and suitable for a fantasy NFT game. Don't mention NFT or blockchain and don't use any markdown syntax.`,
+//           },
+//         ],
+//       },
+//     ];
 
-    const response = await ai.models.generateContentStream({
-      model,
-      config,
-      contents,
-    });
+//     const response = await ai.models.generateContentStream({
+//       model,
+//       config,
+//       contents,
+//     });
 
-    let description = "";
-    for await (const chunk of response) {
-      description += chunk.text || "";
-    }
+//     let description = "";
+//     for await (const chunk of response) {
+//       description += chunk.text || "";
+//     }
 
-    return description.trim();
-  } catch (error) {
-    console.error("Error generating short description:", error);
-    // Fallback description
-    return `A mystical fusion of ${entity1} and ${entity2}, this ${rarity}-star creature embodies the combined essence of its legendary parents.`;
-  }
-}
+//     return description.trim();
+//   } catch (error) {
+//     console.error("Error generating short description:", error);
+//     // Fallback description
+//     return `A mystical fusion of ${entity1} and ${entity2}, this ${rarity}-star creature embodies the combined essence of its legendary parents.`;
+//   }
+// }
 
 async function generateHybridName(
   entity1: string,

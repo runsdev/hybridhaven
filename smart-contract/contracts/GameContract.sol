@@ -10,11 +10,14 @@ contract GameContract is Ownable, ReentrancyGuard {
     NFTContract public nftContract;
     ChainlinkVRFConsumer public vrfConsumer;
     
-    // Merge request structure
     struct MergeRequest {
         address player;
-        uint256 entity1Id;
-        uint256 entity2Id;
+        string entity1Name;  // Name of first entity (starter or hybrid)
+        string entity2Name;  // Name of second entity (starter or hybrid)
+        bool entity1IsStarter;  // True if entity1 is a starter
+        bool entity2IsStarter;  // True if entity2 is a starter
+        uint256 entity1TokenId; // Token ID if hybrid (0 if starter)
+        uint256 entity2TokenId; // Token ID if hybrid (0 if starter)
         uint256 requestId; // VRF request ID
         bool fulfilled;
         uint256 timestamp;
@@ -33,8 +36,19 @@ contract GameContract is Ownable, ReentrancyGuard {
     // Backend address that can trigger image updates
     address public backendAddress;
     
+    // array of available starter entity names
+    string[] public starterEntities = [
+        "Fire", "Water", "Earth", "Air", "Light", 
+        "Shadow", "Metal", "Crystal", "Lightning", "Ice",
+        "Plant", "Beast", "Aquatic", "Avian", "Insect",
+        "Stellar", "Lunar", "Solar", "Void", "Nebula",
+        "Forest", "Desert", "Ocean", "Mountain", "Swamp",
+        "Wolf", "Tiger", "Eagle", "Bear", "Fox",
+        "Oak", "Rose", "Cactus", "Lotus", "Fern"
+    ];
+    
     // Events
-    event MergeRequested(address indexed player, uint256 entity1Id, uint256 entity2Id, uint256 requestId);
+    event MergeRequested(address indexed player, string entity1Name, string entity2Name, uint256 requestId);
     event MergeCompleted(address indexed player, uint256 newEntityId, uint8 rarity, uint256 requestId);
     event BackendAddressUpdated(address indexed oldAddress, address indexed newAddress);
     event NFTContractUpdated(address indexed oldAddress, address indexed newAddress);
@@ -64,6 +78,9 @@ contract GameContract is Ownable, ReentrancyGuard {
         require(_vrfConsumer != address(0), "Invalid VRF consumer address");
         address oldAddress = address(vrfConsumer);
         vrfConsumer = ChainlinkVRFConsumer(_vrfConsumer);
+        
+        // Note: Ownership transfer no longer needed since requestRandomWords is accessible to all
+        
         emit VRFConsumerUpdated(oldAddress, _vrfConsumer);
     }
     
@@ -73,33 +90,75 @@ contract GameContract is Ownable, ReentrancyGuard {
         _;
     }
     
-    // Request to merge two entities
-    function requestMerge(uint256 entity1Id, uint256 entity2Id) external nonReentrant {
-        require(entity1Id != entity2Id, "Cannot merge entity with itself");
-        require(nftContract.ownerOf(entity1Id) == msg.sender, "Not owner of entity 1");
-        require(nftContract.ownerOf(entity2Id) == msg.sender, "Not owner of entity 2");
-        require(block.timestamp >= lastMergeTime[msg.sender] + mergeCooldown, "Merge cooldown active");
+    // Check if a string is a valid starter entity name
+    function isValidStarterEntity(string memory name) public view returns (bool) {
+        for (uint256 i = 0; i < starterEntities.length; i++) {
+            if (keccak256(abi.encodePacked(starterEntities[i])) == keccak256(abi.encodePacked(name))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    // Request to merge two entities (can be starter names or hybrid token IDs)
+    function requestMerge(
+        string memory entity1Name,
+        string memory entity2Name,
+        bool entity1IsStarter,
+        bool entity2IsStarter,
+        uint256 entity1TokenId,
+        uint256 entity2TokenId
+    ) external payable nonReentrant {
+        require(msg.value >= 0.0001 ether, "Payment of 0.0001 ETH required");
+        require(bytes(entity1Name).length > 0 && bytes(entity2Name).length > 0, "Entity names required");
         
-        // Request randomness from VRF
-        uint256 requestId = vrfConsumer.requestRandomWords();
+        if (entity1IsStarter && entity2IsStarter) {
+            require(
+                keccak256(abi.encodePacked(entity1Name)) != keccak256(abi.encodePacked(entity2Name)),
+                "Cannot merge same starter entity"
+            );
+        } else if (!entity1IsStarter && !entity2IsStarter) {
+            require(entity1TokenId != entity2TokenId, "Cannot merge same hybrid entity");
+        }
+        
+        // validate ownership and starter validity
+        if (entity1IsStarter) {
+            require(isValidStarterEntity(entity1Name), "Invalid starter entity 1");
+        } else {
+            require(nftContract.ownerOf(entity1TokenId) == msg.sender, "Not owner of entity 1");
+            NFTContract.Entity memory entity1 = nftContract.getEntity(entity1TokenId);
+            entity1Name = entity1.name;
+        }
+        
+        if (entity2IsStarter) {
+            require(isValidStarterEntity(entity2Name), "Invalid starter entity 2");
+        } else {
+            require(nftContract.ownerOf(entity2TokenId) == msg.sender, "Not owner of entity 2");
+            NFTContract.Entity memory entity2 = nftContract.getEntity(entity2TokenId);
+            entity2Name = entity2.name;
+        }
+            
+        uint256 requestId = vrfConsumer.requestRandomWords(true);
         
         // Store merge request
         mergeRequests[requestId] = MergeRequest({
             player: msg.sender,
-            entity1Id: entity1Id,
-            entity2Id: entity2Id,
+            entity1Name: entity1Name,
+            entity2Name: entity2Name,
+            entity1IsStarter: entity1IsStarter,
+            entity2IsStarter: entity2IsStarter,
+            entity1TokenId: entity1TokenId,
+            entity2TokenId: entity2TokenId,
             requestId: requestId,
             fulfilled: false,
             timestamp: block.timestamp
         });
         
-        // Add to player's pending requests
         playerPendingRequests[msg.sender].push(requestId);
         
-        // Update cooldown
         lastMergeTime[msg.sender] = block.timestamp;
         
-        emit MergeRequested(msg.sender, entity1Id, entity2Id, requestId);
+        emit MergeRequested(msg.sender, entity1Name, entity2Name, requestId);
     }
     
     // Complete merge after randomness is fulfilled (called by backend)
@@ -107,21 +166,19 @@ contract GameContract is Ownable, ReentrancyGuard {
         uint256 requestId,
         string memory newEntityName,
         string memory imageURI
-    ) external onlyBackendOrOwner {
+    ) external {
         MergeRequest storage request = mergeRequests[requestId];
         require(request.player != address(0), "Invalid request ID");
         require(!request.fulfilled, "Request already fulfilled");
         
-        // Get randomness result
-        uint256 randomness = vrfConsumer.getRandomnessResult(requestId);
-        require(randomness != 0, "Randomness not yet fulfilled");
+        // Check if VRF request is fulfilled and get randomness
+        (bool fulfilled, uint256[] memory randomWords) = vrfConsumer.getRequestStatus(requestId);
+        require(fulfilled, "VRF request not yet fulfilled");
+        require(randomWords.length > 0, "No random words received");
         
-        // Calculate rarity based on randomness (1-5 stars)
+        // apply range transformation (1-10000)
+        uint256 randomness = (randomWords[0] % 10000) + 1;
         uint8 rarity = calculateRarity(randomness);
-        
-        // Get parent entity names
-        NFTContract.Entity memory entity1 = nftContract.getEntity(request.entity1Id);
-        NFTContract.Entity memory entity2 = nftContract.getEntity(request.entity2Id);
         
         // Mint new hybrid entity
         uint256 newEntityId = nftContract.mintHybridEntity(
@@ -129,8 +186,8 @@ contract GameContract is Ownable, ReentrancyGuard {
             newEntityName,
             rarity,
             imageURI,
-            entity1.name,
-            entity2.name
+            request.entity1Name,
+            request.entity2Name
         );
         
         // Mark request as fulfilled
@@ -145,13 +202,17 @@ contract GameContract is Ownable, ReentrancyGuard {
     // Calculate rarity based on randomness
     function calculateRarity(uint256 randomness) internal pure returns (uint8) {
         uint256 roll = randomness;
-        // uint256 roll = randomness % 100;
         
         if (roll <= 10) return 5;    //  0.1% chance for 5-star
         if (roll <= 1000) return 4;  //  9.9% chance for 4-star  
         if (roll <= 5000) return 3;  // 40.0% chance for 3-star
         if (roll <= 7000) return 2;  // 30.0% chance for 2-star
         return 1;                    // 20.0% chance for 1-star
+    }
+    
+    // Get all starter entity names
+    function getStarterEntities() external view returns (string[] memory) {
+        return starterEntities;
     }
     
     // Get pending merge requests for a player
@@ -222,5 +283,21 @@ contract GameContract is Ownable, ReentrancyGuard {
     // Get backend address
     function getBackendAddress() external view returns (address) {
         return backendAddress;
+    }
+    
+    // Check if VRF request is ready for completion
+    function isRandomnessReady(uint256 requestId) external view returns (bool) {
+        (bool fulfilled, ) = vrfConsumer.getRequestStatus(requestId);
+        return fulfilled;
+    }
+    
+    // Get randomness for a request (for backend to check)
+    function getRequestRandomness(uint256 requestId) external view returns (uint256) {
+        (bool fulfilled, uint256[] memory randomWords) = vrfConsumer.getRequestStatus(requestId);
+        require(fulfilled, "VRF request not yet fulfilled");
+        require(randomWords.length > 0, "No random words received");
+        
+        // Apply the same transformation as in completeMerge
+        return (randomWords[0] % 10000) + 1;
     }
 }

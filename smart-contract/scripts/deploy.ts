@@ -133,9 +133,7 @@ async function main() {
     
     try {
         // Deploy ChainlinkVRFConsumer (only needs VRF coordinator address)
-        const vrfConsumer = await deployContract("ChainlinkVRFConsumer", [
-            config.vrfCoordinator
-        ]);
+        const vrfConsumer = await deployContract("ChainlinkVRFConsumer");
         
         // Deploy NFTContract
         const nftContract = await deployContract("NFTContract");
@@ -145,22 +143,6 @@ async function main() {
 
         console.log("\n🔄 Setting up contract configurations...");
         
-        // Configure VRF Consumer
-        console.log("📝 Configuring VRF Consumer...");
-        const setSubscriptionTx = await vrfConsumer.setSubscriptionId(BigInt(config.subscriptionId || 0));
-        await setSubscriptionTx.wait();
-        
-        const setKeyHashTx = await vrfConsumer.setKeyHash(config.keyHash);
-        await setKeyHashTx.wait();
-        
-        const setVRFConfigTx = await vrfConsumer.setVRFConfig(
-            config.callbackGasLimit,
-            config.requestConfirmations,
-            1 // numWords
-        );
-        await setVRFConfigTx.wait();
-        console.log("✅ VRF Consumer configured");
-        
         // Configure Game Contract
         console.log("📝 Configuring Game Contract...");
         const setNFTTx = await gameContract.setNFTContract(await nftContract.getAddress());
@@ -169,12 +151,6 @@ async function main() {
         const setVRFTx = await gameContract.setVRFConsumer(await vrfConsumer.getAddress());
         await setVRFTx.wait();
         console.log("✅ Game Contract configured");
-        
-        // Authorize Game Contract to call VRF Consumer
-        console.log("📝 Authorizing Game Contract...");
-        const authorizeTx = await vrfConsumer.addAuthorizedCaller(await gameContract.getAddress());
-        await authorizeTx.wait();
-        console.log("✅ Game Contract authorized");
         
         // Transfer NFTContract ownership to GameContract
         console.log("📝 Transferring NFTContract ownership...");

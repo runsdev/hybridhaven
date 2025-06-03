@@ -5,38 +5,39 @@ async function main() {
   const gameContractAddress = "0xe29Ace93198C74373F51bCf61c2b9Fbee462E469";
   const vrfConsumerAddress = "0x277c9A920148a244FBB3dC3596aE1C99139cC7b7";
   
-  console.log("🔧 Authorizing Game Contract in VRF Consumer...");
+  console.log("ℹ️ VRF Consumer Access Info");
   console.log("Game Contract:", gameContractAddress);
   console.log("VRF Consumer:", vrfConsumerAddress);
   console.log("");
 
-  // Get VRF consumer contract instance
+  console.log("✅ No authorization needed! The VRF Consumer has been modified to allow any user or contract to call requestRandomWords.");
+  console.log("🔓 The access restriction has been removed to facilitate more flexible integration.");
+  
+  // Get VRF consumer contract instance to check current configuration
   const vrfConsumer = await ethers.getContractAt("ChainlinkVRFConsumer", vrfConsumerAddress);
   
   try {
-    // Add Game contract as authorized caller
-    console.log("📝 Adding Game contract as authorized caller...");
-    const tx = await vrfConsumer.addAuthorizedCaller(gameContractAddress);
-    console.log("Transaction hash:", tx.hash);
+    // Display current VRF configuration
+    console.log("\n📊 Current VRF Configuration:");
+    const subscriptionId = await vrfConsumer.s_subscriptionId();
+    console.log("Subscription ID:", subscriptionId.toString());
     
-    // Wait for confirmation
-    const receipt = await tx.wait();
-    console.log("✅ Game contract authorized successfully!");
-    console.log("Block number:", receipt.blockNumber);
-    console.log("");
+    const keyHash = await vrfConsumer.keyHash();
+    console.log("Key Hash:", keyHash);
     
-    // Test the authorization by calling requestRandomWords from Game contract
-    console.log("🧪 Testing VRF request...");
-    const gameContract = await ethers.getContractAt("GameContract", gameContractAddress);
+    const callbackGasLimit = await vrfConsumer.callbackGasLimit();
+    console.log("Callback Gas Limit:", callbackGasLimit.toString());
     
-    // This should work now that the Game contract is authorized
-    console.log("Authorization setup complete!");
+    const requestConfirmations = await vrfConsumer.requestConfirmations();
+    console.log("Request Confirmations:", requestConfirmations.toString());
+    
+    const numWords = await vrfConsumer.numWords();
+    console.log("Number of Words:", numWords.toString());
+    
+    console.log("\n🧪 VRF is ready to be called by any contract or user!");
     
   } catch (error) {
-    console.error("❌ Error authorizing contract:", error);
-    if (error.message.includes("already authorized")) {
-      console.log("✅ Game contract was already authorized!");
-    }
+    console.error("❌ Error checking VRF configuration:", error);
   }
 }
 

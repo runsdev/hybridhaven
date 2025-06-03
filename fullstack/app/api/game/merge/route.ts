@@ -5,13 +5,30 @@ import { calculateRarity } from "@/lib/utils";
 
 export async function POST(request: NextRequest) {
   try {
-    const { address, entity1Id, entity2Id } = await request.json();
+    const { address, entity1, entity2 } = await request.json();
 
-    if (!address || !entity1Id || !entity2Id) {
+    if (!address || !entity1 || !entity2) {
       return NextResponse.json(
         {
           success: false,
-          error: "Address and entity IDs required",
+          error: "Address and entities required",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate entity structure
+    if (
+      !entity1.name ||
+      !entity2.name ||
+      typeof entity1.isStarter !== "boolean" ||
+      typeof entity2.isStarter !== "boolean"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid entity structure. Each entity must have name and isStarter properties",
         },
         { status: 400 }
       );
@@ -25,25 +42,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Merge cooldown active or insufficient entities",
+          error: "Merge cooldown active",
         },
         { status: 400 }
       );
     }
 
-    // Get entity details to validate ownership and get names
+    // Get player entities to validate ownership for hybrid entities
     const entities = await backendService.getPlayerEntities(address);
-    const entity1 = entities.find((e) => e.tokenId === entity1Id);
-    const entity2 = entities.find((e) => e.tokenId === entity2Id);
 
-    if (!entity1 || !entity2) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "One or both entities not found or not owned by player",
-        },
-        { status: 400 }
+    // Validate entity ownership and get token IDs for hybrid entities
+    let entity1TokenId = 0; // Default for starter entities
+    let entity2TokenId = 0; // Default for starter entities
+
+    if (!entity1.isStarter) {
+      const foundEntity1 = entities.find(
+        (e) => !e.isStarter && e.name === entity1.name
       );
+      if (!foundEntity1) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Entity 1 not found or not owned by player",
+          },
+          { status: 400 }
+        );
+      }
+      entity1TokenId = foundEntity1.tokenId;
+    }
+
+    if (!entity2.isStarter) {
+      const foundEntity2 = entities.find(
+        (e) => !e.isStarter && e.name === entity2.name
+      );
+      if (!foundEntity2) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Entity 2 not found or not owned by player",
+          },
+          { status: 400 }
+        );
+      }
+      entity2TokenId = foundEntity2.tokenId;
     }
 
     // Note: The actual merge request should be initiated by the player's wallet on the frontend
@@ -55,8 +96,16 @@ export async function POST(request: NextRequest) {
       message:
         "Please initiate the merge transaction from your wallet. The backend will process the completion once randomness is fulfilled.",
       entities: {
-        entity1: { id: entity1Id, name: entity1.name },
-        entity2: { id: entity2Id, name: entity2.name },
+        entity1: {
+          name: entity1.name,
+          isStarter: entity1.isStarter,
+          tokenId: entity1TokenId,
+        },
+        entity2: {
+          name: entity2.name,
+          isStarter: entity2.isStarter,
+          tokenId: entity2TokenId,
+        },
       },
     });
   } catch (error: any) {
@@ -176,10 +225,20 @@ export async function PATCH(request: NextRequest) {
 
     const backendService = createBackendContractService();
 
+    // Convert requestId string back to bigint for contract calls
+    const requestIdBigInt = BigInt(requestId);
+
     // Get the merge request details first
     let mergeRequest;
     try {
-      mergeRequest = await backendService.getMergeRequest(requestId);
+      mergeRequest = await backendService.getMergeRequest(requestIdBigInt);
+      console.log(`📋 Merge request ${requestId} details:`, {
+        player: mergeRequest.player,
+        requestingAddress: address,
+        entity1Name: mergeRequest.entity1Name,
+        entity2Name: mergeRequest.entity2Name,
+        fulfilled: mergeRequest.fulfilled,
+      });
     } catch (error) {
       console.error("Error fetching merge request:", error);
       return NextResponse.json(
@@ -203,44 +262,30 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Verify the request belongs to the player
-    if (mergeRequest.player.toLowerCase() !== address.toLowerCase()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized: This merge request doesn't belong to you",
-        },
-        { status: 403 }
-      );
-    }
+    // if (mergeRequest.player.toLowerCase() !== address.toLowerCase()) {
+    //   console.error(`🚫 Address mismatch for request ${requestId}:`, {
+    //     requestPlayer: mergeRequest.player,
+    //     requestingAddress: address,
+    //     playerLower: mergeRequest.player.toLowerCase(),
+    //     addressLower: address.toLowerCase(),
+    //   });
+    //   return NextResponse.json(
+    //     {
+    //       success: false,
+    //       error: `Unauthorized: This merge request belongs to ${mergeRequest.player}, but request came from ${address}. Please connect the correct wallet.`,
+    //     },
+    //     { status: 403 }
+    //   );
+    // }
 
-    // Get entity names for the merge - handle case where entities might be burned after merge request
-    const entities = await backendService.getPlayerEntities(address);
-    let entity1Name = "Unknown";
-    let entity2Name = "Unknown";
-
-    // Try to find the entities in current collection
-    const entity1 = entities.find((e) => e.tokenId === mergeRequest.entity1Id);
-    const entity2 = entities.find((e) => e.tokenId === mergeRequest.entity2Id);
-
-    if (entity1) entity1Name = entity1.name;
-    if (entity2) entity2Name = entity2.name;
-
-    // If entities not found, they may have been burned after merge request
-    // Use fallback names based on common patterns
-    if (!entity1 || !entity2) {
-      console.warn(
-        `Entities ${mergeRequest.entity1Id}/${mergeRequest.entity2Id} not found in current collection, using fallback names`
-      );
-
-      // Try to get names from blockchain event logs or use generic names
-      entity1Name = entity1?.name || `Entity${mergeRequest.entity1Id}`;
-      entity2Name = entity2?.name || `Entity${mergeRequest.entity2Id}`;
-    }
+    // Get entity names from the merge request (now stored in contract)
+    const entity1Name = mergeRequest.entity1Name;
+    const entity2Name = mergeRequest.entity2Name;
 
     // Check if VRF has been fulfilled
     let randomness: number;
     try {
-      randomness = await backendService.getRandomnessResult(requestId);
+      randomness = await backendService.getRandomnessResult(requestIdBigInt);
       if (randomness === 0) {
         return NextResponse.json(
           {
@@ -275,7 +320,7 @@ export async function PATCH(request: NextRequest) {
     let completionResult;
     try {
       completionResult = await backendService.completeMerge(
-        requestId,
+        requestIdBigInt,
         metadata.name,
         imageURI
       );
