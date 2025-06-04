@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextRequest, NextResponse } from "next/server";
 import { fetchMetadataFromKeyValues, fetchMetadataFromIPFS } from "@/lib/ipfs";
 
@@ -5,27 +7,60 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const metadataURI = searchParams.get("uri");
-    const cid = searchParams.get("cid");
+    let cid = searchParams.get("cid");
 
-    // Handle new key-value approach using CID
+    // If cid is actually a full URL, extract the hash from it
+    if (cid && cid.startsWith("http")) {
+      // Extract CID from URLs like: https://gateway.com/ipfs/bafybeic...
+      const matches = cid.match(/\/ipfs\/([a-zA-Z0-9]+)/);
+      if (matches && matches[1]) {
+        cid = matches[1];
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Could not extract CID from URL",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Handle metadata fetching using CID (prioritize this approach)
     if (cid) {
       try {
-        // Fetch metadata from IPFS key-value pairs using the image CID
-        const metadata = await fetchMetadataFromKeyValues(cid);
+        // First try to fetch as a JSON metadata file
+        const metadata = await fetchMetadataFromIPFS(`ipfs://${cid}`);
 
         return NextResponse.json({
           success: true,
           metadata,
         });
-      } catch (error: any) {
-        console.error("Error fetching key-value metadata:", error);
-        return NextResponse.json(
-          {
-            success: false,
-            error: error.message || "Failed to fetch key-value metadata",
-          },
-          { status: 500 }
+      } catch (jsonError) {
+        console.warn(
+          "Failed to fetch as JSON metadata, trying key-value approach:",
+          jsonError
         );
+
+        try {
+          // Fallback to key-value metadata (for image files with metadata in key-values)
+          const metadata = await fetchMetadataFromKeyValues(cid);
+
+          return NextResponse.json({
+            success: true,
+            metadata,
+          });
+        } catch (kvError) {
+          console.error("Error fetching metadata with both methods:", kvError);
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "Failed to fetch metadata using either JSON or key-value methods",
+            },
+            { status: 500 }
+          );
+        }
       }
     }
 

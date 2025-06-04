@@ -5,99 +5,101 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract NFTContract is ERC721, ERC721URIStorage, Ownable {
     using Counters for Counters.Counter;
+    using Strings for uint256;
     Counters.Counter private _tokenIds;
+
+    // Base URI for metadata
+    string private _baseTokenURI;
 
     // Entity structure
     struct Entity {
         uint256 tokenId;
         string name;
-        uint8 rarity; // 1-5 star rarity
-        string imageURI;
-        string parent1; // Name of first parent entity (if merged)
-        string parent2; // Name of second parent entity (if merged)
+        uint8 rarity;
+        string metadataURI;
+        string parent1;
+        string parent2;
         uint256 createdAt;
-        bool isStarter; // True if this is a starter entity
+        bool isStarter;
     }
 
     // Mapping from token ID to entity data
     mapping(uint256 => Entity) public entities;
     
-    // Mapping to track user's starter entities
-    mapping(address => bool) public hasStarterEntity;
-    
-    // Array of starter entity names
-    string[] public starterEntities = [
-        "Fire", "Water", "Earth", "Air", "Light", 
-        "Shadow", "Metal", "Crystal", "Lightning", "Ice",
-        "Plant", "Beast", "Aquatic", "Avian", "Insect",
-        "Stellar", "Lunar", "Solar", "Void", "Nebula",
-        "Forest", "Desert", "Ocean", "Mountain", "Swamp",
-        "Wolf", "Tiger", "Eagle", "Bear", "Fox",
-        "Oak", "Rose", "Cactus", "Lotus", "Fern"
-    ];
-    
-    // Events
+    // Events for OpenSea compatibility
     event EntityMinted(address indexed to, uint256 indexed tokenId, string name, uint8 rarity);
-    event StarterEntityClaimed(address indexed user, uint256 indexed tokenId, string name);
+    
+    // ERC-4906: Permanent URI Event (for frozen metadata)
+    event PermanentURI(string _value, uint256 indexed _id);
 
-    constructor() ERC721("HybridHaven", "HYBRID") {}
-
-    // Mint a starter entity for new players
-    function claimStarterEntity() external {
-        require(!hasStarterEntity[msg.sender], "Already claimed starter entities");
-        
-        // Mint all starter entities
-        for (uint256 i = 0; i < starterEntities.length; i++) {
-            string memory starterName = starterEntities[i];
-            
-            _tokenIds.increment();
-            uint256 newTokenId = _tokenIds.current();
-            
-            _safeMint(msg.sender, newTokenId);
-            
-            entities[newTokenId] = Entity({
-                tokenId: newTokenId,
-                name: starterName,
-                rarity: 1, // Starter entities are always 1 star
-                imageURI: "", // Will be set by backend
-                parent1: "",
-                parent2: "",
-                createdAt: block.timestamp,
-                isStarter: true
-            });
-            
-            emit StarterEntityClaimed(msg.sender, newTokenId, starterName);
-            emit EntityMinted(msg.sender, newTokenId, starterName, 1);
-        }
-        
-        hasStarterEntity[msg.sender] = true;
+    constructor() ERC721("HybridHaven", "HYBRID") {
+        _baseTokenURI = "https://cyan-nearby-hippopotamus-418.mypinata.cloud/ipfs/";
     }
 
-    // Mint a new hybrid entity (called by GameContract)
+    function contractURI() public pure returns (string memory) {
+        return "https://cyan-nearby-hippopotamus-418.mypinata.cloud/ipfs/bafkreigukneaeoz4k7cu523gliovspmeityqweel7lr2gn35jw5uhdvsxi";
+    }
+
+    // Set base URI for metadata (OpenSea standard)
+    function setBaseTokenURI(string memory baseURI) external onlyOwner {
+        _baseTokenURI = baseURI;
+        // Emit batch metadata update for all tokens
+        if (_tokenIds.current() > 0) {
+            emit BatchMetadataUpdate(1, _tokenIds.current());
+        }
+    }
+
+    function _baseURI() internal view override returns (string memory) {
+        return _baseTokenURI;
+    }
+
+    // override tokenURI for OpenSea compatibility
+    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
+        require(_exists(tokenId), "ERC721: URI query for nonexistent token");
+        
+        // try to get stored URI first (for IPFS metadata)
+        string memory _tokenURI = super.tokenURI(tokenId);
+        if (bytes(_tokenURI).length > 0) {
+            return _tokenURI;
+        }
+        
+        // fallback
+        string memory baseUri = _baseURI();
+        return bytes(baseUri).length > 0 
+            ? string(abi.encodePacked(baseUri, tokenId.toString()))
+            : "";
+    }
+
+    // mint a new hybrid entity (called by GameContract)
     function mintHybridEntity(
         address to,
         string memory name,
         uint8 rarity,
-        string memory imageURI,
+        string memory metadataURI,
         string memory parent1,
         string memory parent2
-    ) external onlyOwner returns (uint256) {
+    ) external returns (uint256) {
         require(rarity >= 1 && rarity <= 5, "Invalid rarity");
         
         _tokenIds.increment();
         uint256 newTokenId = _tokenIds.current();
         
         _safeMint(to, newTokenId);
-        _setTokenURI(newTokenId, imageURI);
+        
+        // Set IPFS metadata URI for hybrid entities
+        if (bytes(metadataURI).length > 0) {
+            _setTokenURI(newTokenId, metadataURI);
+        }
         
         entities[newTokenId] = Entity({
             tokenId: newTokenId,
             name: name,
             rarity: rarity,
-            imageURI: imageURI,
+            metadataURI: metadataURI,
             parent1: parent1,
             parent2: parent2,
             createdAt: block.timestamp,
@@ -105,15 +107,39 @@ contract NFTContract is ERC721, ERC721URIStorage, Ownable {
         });
         
         emit EntityMinted(to, newTokenId, name, rarity);
+        emit MetadataUpdate(newTokenId);
         
         return newTokenId;
     }
 
-    // Update entity image URI (called by backend after image generation)
-    function updateEntityImage(uint256 tokenId, string memory imageURI) external onlyOwner {
+    // update entity metadata URI (called by backend after metadata generation)
+    function updateEntityMetadata(uint256 tokenId, string memory metadataURI) external onlyOwner {
         require(_exists(tokenId), "Entity does not exist");
-        entities[tokenId].imageURI = imageURI;
-        _setTokenURI(tokenId, imageURI);
+        
+        if (bytes(metadataURI).length > 0) {
+            _setTokenURI(tokenId, metadataURI);
+            entities[tokenId].metadataURI = metadataURI;
+        }
+        
+        emit MetadataUpdate(tokenId);
+    }
+
+    // Freeze metadata for a token (OpenSea standard)
+    function freezeMetadata(uint256 tokenId) external onlyOwner {
+        require(_exists(tokenId), "Entity does not exist");
+        string memory uri = tokenURI(tokenId);
+        emit PermanentURI(uri, tokenId);
+    }
+
+    // Batch freeze metadata
+    function batchFreezeMetadata(uint256 fromTokenId, uint256 toTokenId) external onlyOwner {
+        require(fromTokenId <= toTokenId, "Invalid range");
+        for (uint256 i = fromTokenId; i <= toTokenId; i++) {
+            if (_exists(i)) {
+                string memory uri = tokenURI(i);
+                emit PermanentURI(uri, i);
+            }
+        }
     }
 
     // Get entity details
@@ -129,25 +155,36 @@ contract NFTContract is ERC721, ERC721URIStorage, Ownable {
         uint256 index = 0;
         
         for (uint256 i = 1; i <= _tokenIds.current(); i++) {
-            if (ownerOf(i) == owner) {
+            if (_exists(i) && ownerOf(i) == owner) {
                 tokenIds[index] = i;
-                index++;
+                index++;    
             }
         }
         
         return tokenIds;
     }
 
+    // Get total supply
+    function totalSupply() public view returns (uint256) {
+        return _tokenIds.current();
+    }
+
+    // Check if token exists
+    function exists(uint256 tokenId) external view returns (bool) {
+        return _exists(tokenId);
+    }
+
+    // Override supportsInterface for OpenSea compatibility
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
+        // ERC-4906 interface ID
+        bytes4 ERC4906_INTERFACE_ID = 0x49064906;
+        
+        return interfaceId == ERC4906_INTERFACE_ID || super.supportsInterface(interfaceId);
+    }
+
     // Required overrides
     function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
         super._burn(tokenId);
-    }
-
-    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
-        return super.tokenURI(tokenId);
-    }
-
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
-        return super.supportsInterface(interfaceId);
+        delete entities[tokenId];
     }
 }

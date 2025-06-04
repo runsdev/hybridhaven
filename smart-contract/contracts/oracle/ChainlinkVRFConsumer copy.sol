@@ -4,8 +4,9 @@ pragma solidity ^0.8.28;
 
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-contract ChainlinkVRFConsumer is VRFConsumerBaseV2Plus {
+contract ChainlinkVRFConsumerCopy is VRFConsumerBaseV2Plus, ReentrancyGuard {
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords);
 
@@ -18,8 +19,7 @@ contract ChainlinkVRFConsumer is VRFConsumerBaseV2Plus {
         public s_requests; /* requestId --> requestStatus */
 
     // Your subscription ID.
-    uint256 public s_subscriptionId = 
-        10743248137844086033492563817724197623964455061221729200613149519185305041754;
+    uint256 public s_subscriptionId;
 
     // Past request IDs.
     uint256[] public requestIds;
@@ -42,14 +42,60 @@ contract ChainlinkVRFConsumer is VRFConsumerBaseV2Plus {
     // The default is 3, but you can set this higher.
     uint16 public requestConfirmations = 3;
 
+    // For this example, retrieve 2 random values in one request.
+    // Cannot exceed VRFCoordinatorV2_5.MAX_NUM_WORDS.
     uint32 public numWords = 1;
+
+    // Events for configuration changes
+    event SubscriptionIdSet(uint256 oldSubscriptionId, uint256 newSubscriptionId);
+    event KeyHashSet(bytes32 oldKeyHash, bytes32 newKeyHash);
+    event VRFConfigSet(uint32 callbackGasLimit, uint16 requestConfirmations, uint32 numWords);
 
     /**
      * HARDCODED FOR SEPOLIA
      * COORDINATOR: 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B
      */
     constructor(
-    ) VRFConsumerBaseV2Plus(0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B) {
+        address vrfCoordinator
+    ) VRFConsumerBaseV2Plus(vrfCoordinator) {
+        // Subscription ID will be set via setSubscriptionId function
+    }
+    
+    /**
+     * @notice Sets the subscription ID for VRF requests
+     * @param subscriptionId The Chainlink VRF subscription ID
+     */
+    function setSubscriptionId(uint256 subscriptionId) external {
+        uint256 oldSubscriptionId = s_subscriptionId;
+        s_subscriptionId = subscriptionId;
+        emit SubscriptionIdSet(oldSubscriptionId, subscriptionId);
+    }
+    
+    /**
+     * @notice Sets the key hash for VRF requests
+     * @param _keyHash The key hash to use for VRF requests
+     */
+    function setKeyHash(bytes32 _keyHash) external {
+        bytes32 oldKeyHash = keyHash;
+        keyHash = _keyHash;
+        emit KeyHashSet(oldKeyHash, _keyHash);
+    }
+    
+    /**
+     * @notice Sets the VRF configuration parameters
+     * @param _callbackGasLimit Gas limit for the callback function
+     * @param _requestConfirmations Number of block confirmations before fulfilling
+     * @param _numWords Number of random words to request
+     */
+    function setVRFConfig(
+        uint32 _callbackGasLimit,
+        uint16 _requestConfirmations,
+        uint32 _numWords
+    ) external {
+        callbackGasLimit = _callbackGasLimit;
+        requestConfirmations = _requestConfirmations;
+        numWords = _numWords;
+        emit VRFConfigSet(_callbackGasLimit, _requestConfirmations, _numWords);
     }
 
     // Assumes the subscription is funded sufficiently.
@@ -57,7 +103,7 @@ contract ChainlinkVRFConsumer is VRFConsumerBaseV2Plus {
     // `false` to pay in LINK
     function requestRandomWords(
         bool enableNativePayment
-    ) external returns (uint256 requestId) {
+    ) external nonReentrant returns (uint256 requestId) {
         // Will revert if subscription is not set and funded.
         requestId = s_vrfCoordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
@@ -73,6 +119,8 @@ contract ChainlinkVRFConsumer is VRFConsumerBaseV2Plus {
                 )
             })
         );
+        
+        // Effects: Update state after external call to prevent reentrancy
         s_requests[requestId] = RequestStatus({
             randomWords: new uint256[](0),
             exists: true,

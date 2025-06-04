@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Entity,
-  GameState,
-  MergeResponse,
-  StarterEntityResponse,
-} from "@/types/game";
+import { Entity, GameState, MergeResponse, HatchTimer } from "@/types/game";
 import { contractService } from "@/lib/contracts";
 
 // Global tracking to prevent duplicate auto-finalize calls across component re-renders
-const globalAutoFinalizingRequests = new Set<number>();
-const globalCompletedRequests = new Set<number>();
+const globalAutoFinalizingRequests = new Set<bigint>();
+const globalCompletedRequests = new Set<bigint>();
+
+// VRF timing constants
+const VRF_EXPECTED_TIME = 120; // 2 minutes in seconds
+const VRF_POLL_INTERVAL = 10; // Poll every 10 seconds
+const VRF_MAX_WAIT_TIME = 300; // 5 minutes max wait
 
 export function useGame() {
   const [gameState, setGameState] = useState<GameState>({
@@ -22,17 +22,100 @@ export function useGame() {
   });
 
   const [mergeInProgress, setMergeInProgress] = useState(false);
-  const [finalizeInProgress, setFinalizeInProgress] = useState<number[]>([]);
+  const [finalizeInProgress, setFinalizeInProgress] = useState<bigint[]>([]);
   const [autoFinalizingRequests, setAutoFinalizingRequests] = useState<
-    Set<number>
+    Set<bigint>
   >(new Set());
+
+  // Hatch timer state for VRF requests
+  const [hatchTimers, setHatchTimers] = useState<Map<bigint, HatchTimer>>(
+    new Map()
+  );
 
   // Use ref to track latest state for callbacks
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
 
-  // Cleanup function for intervals
-  const clearPollInterval = useCallback((requestId: number) => {}, []);
+  // Start hatch timer for a VRF request
+  const startHatchTimer = useCallback(
+    (requestId: bigint, entity1Name: string, entity2Name: string) => {
+      const startTime = Date.now();
+      const endTime = startTime + VRF_EXPECTED_TIME * 1000;
+
+      const timer: HatchTimer = {
+        requestId,
+        entity1Name,
+        entity2Name,
+        startTime,
+        endTime,
+        duration: VRF_EXPECTED_TIME,
+        stage: "waiting",
+        progress: 0,
+      };
+
+      setHatchTimers((prev) => new Map(prev).set(requestId, timer));
+
+      // Start the timer update interval
+      const interval = setInterval(() => {
+        const now = Date.now();
+        const elapsed = (now - startTime) / 1000;
+        const progress = Math.min(elapsed / VRF_EXPECTED_TIME, 1);
+
+        let stage: HatchTimer["stage"] = "waiting";
+        if (progress >= 0.8) {
+          stage = "almost_ready";
+        } else if (progress >= 0.5) {
+          stage = "incubating";
+        }
+
+        setHatchTimers((prev) => {
+          const newMap = new Map(prev);
+          const currentTimer = newMap.get(requestId);
+          if (currentTimer) {
+            newMap.set(requestId, {
+              ...currentTimer,
+              progress,
+              stage,
+            });
+          }
+          return newMap;
+        });
+
+        // Clean up interval when timer expires or request is completed
+        if (progress >= 1 || !hatchTimers.has(requestId)) {
+          clearInterval(interval);
+        }
+      }, 1000); // Update every second for smooth animation
+
+      return interval;
+    },
+    []
+  );
+
+  // Complete hatch timer when merge is finalized
+  const completeHatchTimer = useCallback((requestId: bigint) => {
+    setHatchTimers((prev) => {
+      const newMap = new Map(prev);
+      const timer = newMap.get(requestId);
+      if (timer) {
+        newMap.set(requestId, {
+          ...timer,
+          stage: "hatched",
+          progress: 1,
+        });
+
+        // Remove timer after animation completes
+        setTimeout(() => {
+          setHatchTimers((current) => {
+            const updated = new Map(current);
+            updated.delete(requestId);
+            return updated;
+          });
+        }, 3000);
+      }
+      return newMap;
+    });
+  }, []);
 
   const loadPlayerData = useCallback(async (address: string) => {
     if (!address) return;
@@ -49,10 +132,15 @@ export function useGame() {
       const data = await response.json();
 
       if (data.success) {
+        // Convert pending requests to bigint array
+        const pendingRequests = data.pendingRequests
+          ? data.pendingRequests.map((id: any) => BigInt(id))
+          : [];
+
         setGameState((prev) => ({
           ...prev,
           entities: data.entities || [],
-          pendingRequests: data.pendingRequests || [],
+          pendingRequests,
           loading: false,
         }));
       } else {
@@ -68,10 +156,14 @@ export function useGame() {
     }
   }, []);
 
-  // Add NFT to MetaMask wallet
+  // Add NFT to MetaMask wallet (only for hybrid entities)
   const addNFTToWallet = useCallback(
     async (tokenId: number, entity: Entity) => {
-      if (typeof window !== "undefined" && window.ethereum) {
+      if (
+        typeof window !== "undefined" &&
+        window.ethereum &&
+        !entity.isStarter
+      ) {
         try {
           // Get the NFT contract address from the contract service
           const nftContractAddress =
@@ -84,12 +176,13 @@ export function useGame() {
               options: {
                 address: nftContractAddress,
                 tokenId: tokenId.toString(),
-                image: entity.imageURI
-                  ? entity.imageURI.replace(
-                      "ipfs://",
-                      "https://gateway.pinata.cloud/ipfs/"
-                    )
-                  : undefined,
+                image: entity.imageURI,
+                // ? entity.imageURI.replace(
+                //     "ipfs://",
+                //     process.env.NEXT_PUBLIC_IPFS_GATEWAY ||
+                //       "https://gateway.pinata.cloud/ipfs/"
+                //   )
+                // : undefined,
                 name: entity.name,
               },
             },
@@ -104,9 +197,9 @@ export function useGame() {
     []
   );
 
-  // Auto-finalize merge - simplified without polling
+  // Enhanced auto-finalize merge with VRF timing and hatch timer
   const autoFinalizeMerge = useCallback(
-    async (requestId: number) => {
+    async (requestId: bigint, entity1Name?: string, entity2Name?: string) => {
       const currentAddress = gameStateRef.current.address;
 
       // Multiple layers of protection against duplicate calls
@@ -122,63 +215,154 @@ export function useGame() {
         return;
       }
 
-      console.log(`Starting auto-finalization for merge request ${requestId}`);
+      console.log(
+        `🥚 Starting VRF hatch process for merge request ${requestId}`
+      );
+
+      // Start hatch timer if entity names are provided
+      if (entity1Name && entity2Name) {
+        startHatchTimer(requestId, entity1Name, entity2Name);
+      }
 
       // Add to both local and global tracking
       setAutoFinalizingRequests((prev) => new Set(prev).add(requestId));
       globalAutoFinalizingRequests.add(requestId);
 
-      try {
-        console.log(`Attempting to finalize merge request ${requestId}`);
+      // VRF polling with exponential backoff
+      const pollVRF = async (attempt: number = 0): Promise<void> => {
+        const maxAttempts = Math.ceil(VRF_MAX_WAIT_TIME / VRF_POLL_INTERVAL);
 
-        const response = await fetch("/api/game/merge", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            address: currentAddress,
-            requestId,
-          }),
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-          console.log(`✅ Merge ${requestId} finalized successfully:`, data);
-
-          // Mark as completed globally
-          globalCompletedRequests.add(requestId);
-          globalAutoFinalizingRequests.delete(requestId);
-
-          // Show success notification
+        if (attempt >= maxAttempts) {
+          console.log(
+            `⏰ VRF timeout for request ${requestId} after ${VRF_MAX_WAIT_TIME}s`
+          );
           setGameState((prev) => ({
             ...prev,
-            error: null,
+            error: `VRF request ${requestId} timed out. Please try manual finalization.`,
           }));
+          return;
+        }
 
-          // Refresh player data to show new entity
-          await loadPlayerData(currentAddress);
+        try {
+          console.log(
+            `🔍 Polling VRF for request ${requestId} (attempt ${attempt + 1})`
+          );
 
-          // Auto-add the new NFT to MetaMask
-          if (data.newEntityId && data.name) {
-            setTimeout(() => {
-              // Find the newly created entity using the latest state
-              const currentEntities = gameStateRef.current.entities;
-              const newEntity = currentEntities.find(
-                (e) => e.tokenId === data.newEntityId
+          const response = await fetch("/api/game/merge", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              address: currentAddress,
+              requestId: requestId.toString(), // Convert bigint to string for JSON
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            console.log(`✅ Merge ${requestId} finalized successfully:`, data);
+
+            // Mark as completed globally
+            globalCompletedRequests.add(requestId);
+            globalAutoFinalizingRequests.delete(requestId);
+
+            // Complete the hatch timer
+            completeHatchTimer(requestId);
+
+            // Show success notification
+            setGameState((prev) => ({
+              ...prev,
+              error: null,
+            }));
+
+            // Refresh player data to show new entity
+            await loadPlayerData(currentAddress);
+
+            // Auto-add the new NFT to MetaMask
+            if (data.newEntityId && data.name) {
+              setTimeout(() => {
+                // Find the newly created entity using the latest state
+                const currentEntities = gameStateRef.current.entities;
+                const newEntity = currentEntities.find(
+                  (e) => e.tokenId === data.newEntityId
+                );
+                if (newEntity) {
+                  addNFTToWallet(data.newEntityId, newEntity);
+                }
+              }, 2000); // Wait 2 seconds for data to be loaded
+            }
+            return;
+          } else {
+            // Handle specific error cases
+            if (
+              data.error.includes("Request already fulfilled") ||
+              data.error.includes("already fulfilled") ||
+              data.error.includes("This merge has already been completed")
+            ) {
+              console.log(
+                `✅ Merge ${requestId} was already completed, stopping auto-finalization`
               );
-              if (newEntity) {
-                addNFTToWallet(data.newEntityId, newEntity);
-              }
-            }, 2000); // Wait 2 seconds for data to be loaded
-          }
-        } else {
-          console.log(`⏳ Merge ${requestId} not ready yet:`, data.error);
 
-          // Handle specific error cases
+              // Mark as completed globally
+              globalCompletedRequests.add(requestId);
+              globalAutoFinalizingRequests.delete(requestId);
+              completeHatchTimer(requestId);
+
+              // Don't set error state, just refresh data to get latest state
+              await loadPlayerData(currentAddress);
+              return; // Stop trying to finalize this request
+            }
+
+            // Handle authorization errors - this indicates the request belongs to a different wallet
+            if (
+              data.error.includes("Unauthorized") ||
+              data.error.includes("belongs to")
+            ) {
+              console.log(
+                `🚫 Authorization error for request ${requestId}:`,
+                data.error
+              );
+
+              // Mark as completed to stop polling
+              globalCompletedRequests.add(requestId);
+              globalAutoFinalizingRequests.delete(requestId);
+              completeHatchTimer(requestId);
+
+              // Set a user-friendly error message
+              setGameState((prev) => ({
+                ...prev,
+                error:
+                  "This merge request was created with a different wallet. Please connect the correct wallet or ignore this request.",
+              }));
+              return;
+            }
+
+            // Continue polling for VRF delays
+            if (data.error.includes("VRF randomness not yet fulfilled")) {
+              console.log(
+                `⏳ VRF not ready for request ${requestId}, continuing to poll...`
+              );
+
+              // Calculate next poll interval with exponential backoff (max 30s)
+              const nextInterval = Math.min(
+                VRF_POLL_INTERVAL * Math.pow(1.2, attempt),
+                30
+              );
+              setTimeout(() => pollVRF(attempt + 1), nextInterval * 1000);
+              return;
+            }
+
+            // For other errors, log and retry with longer delay
+            console.log(`⚠️ Merge ${requestId} error:`, data.error);
+            setTimeout(() => pollVRF(attempt + 1), VRF_POLL_INTERVAL * 1000);
+          }
+        } catch (error: any) {
+          console.log(`⏳ Merge ${requestId} polling error:`, error.message);
+
+          // If the request was already fulfilled, stop trying
           if (
-            data.error.includes("Request already fulfilled") ||
-            data.error.includes("already fulfilled") ||
-            data.error.includes("This merge has already been completed")
+            error.message.includes("Request already fulfilled") ||
+            error.message.includes("already fulfilled")
           ) {
             console.log(
               `✅ Merge ${requestId} was already completed, stopping auto-finalization`
@@ -187,50 +371,31 @@ export function useGame() {
             // Mark as completed globally
             globalCompletedRequests.add(requestId);
             globalAutoFinalizingRequests.delete(requestId);
+            completeHatchTimer(requestId);
 
-            // Don't set error state, just refresh data to get latest state
             await loadPlayerData(currentAddress);
             return; // Stop trying to finalize this request
           }
 
-          // Set a friendly message for the user only for VRF delays
-          if (data.error.includes("VRF randomness not yet fulfilled")) {
-            setGameState((prev) => ({
-              ...prev,
-              error: `Merge ${requestId} is still processing. Please wait a moment and it will complete automatically.`,
-            }));
-          }
+          // Continue polling for network errors
+          setTimeout(() => pollVRF(attempt + 1), VRF_POLL_INTERVAL * 1000);
         }
-      } catch (error: any) {
-        console.log(`⏳ Merge ${requestId} still processing:`, error.message);
+      };
 
-        // If the request was already fulfilled, stop trying
-        if (
-          error.message.includes("Request already fulfilled") ||
-          error.message.includes("already fulfilled")
-        ) {
-          console.log(
-            `✅ Merge ${requestId} was already completed, stopping auto-finalization`
-          );
+      // Start polling immediately
+      setTimeout(() => pollVRF(0), 1000); // Start after 1 second
 
-          // Mark as completed globally
-          globalCompletedRequests.add(requestId);
-          globalAutoFinalizingRequests.delete(requestId);
-
-          await loadPlayerData(currentAddress);
-          return; // Stop trying to finalize this request
-        }
-      } finally {
-        // Remove from both local and global tracking (but not from completed set)
+      // Cleanup tracking after max wait time
+      setTimeout(() => {
         setAutoFinalizingRequests((prev) => {
           const newSet = new Set(prev);
           newSet.delete(requestId);
           return newSet;
         });
         globalAutoFinalizingRequests.delete(requestId);
-      }
+      }, VRF_MAX_WAIT_TIME * 1000);
     },
-    [loadPlayerData, addNFTToWallet]
+    [loadPlayerData, addNFTToWallet, startHatchTimer, completeHatchTimer]
   );
 
   const connectWallet = useCallback(async () => {
@@ -256,141 +421,181 @@ export function useGame() {
         error: error.message || "Failed to connect wallet",
       }));
     }
-  }, []);
+  }, [loadPlayerData]);
 
-  const claimStarterEntity = useCallback(async () => {
-    if (!gameState.address) return;
-
-    setGameState((prev) => ({ ...prev, loading: true, error: null }));
-
-    try {
-      // Call the contract directly from user's wallet instead of through API
-      const result = await contractService.claimStarterEntity();
-
-      // Refresh data to show new entities
-      await loadPlayerData(gameState.address);
-
-      setGameState((prev) => ({
-        ...prev,
-        loading: false,
-        error: null,
-      }));
-
-      return result;
-    } catch (error: any) {
-      console.error("Claim failed:", error);
-
-      let errorMessage = error.message || "Failed to claim starter entities";
-
-      if (error.message.includes("Already claimed starter entities")) {
-        errorMessage = "You have already claimed your starter collection";
-      } else if (error.message.includes("execution reverted")) {
-        errorMessage =
-          "Transaction failed. You may have already claimed your starter entities";
-      } else if (error.message.includes("user rejected")) {
-        errorMessage = "Transaction was cancelled by user";
-      } else if (error.message.includes("insufficient funds")) {
-        errorMessage = "Insufficient ETH for gas fees";
-      }
-
-      setGameState((prev) => ({
-        ...prev,
-        loading: false,
-        error: errorMessage,
-      }));
-
-      throw error;
-    }
-  }, [gameState.address, loadPlayerData]);
-
+  // Updated request merge to handle virtual starter entities
   const requestMerge = useCallback(
-    async (entity1Id: number, entity2Id: number) => {
-      if (!gameState.address || mergeInProgress) return;
+    async (entity1: Entity, entity2: Entity) => {
+      console.log("🚀 [MERGE FLOW] Starting merge request");
+      console.log("🔍 [MERGE FLOW] Input entities:", {
+        entity1: {
+          name: entity1.name,
+          isStarter: entity1.isStarter,
+          tokenId: entity1.tokenId,
+        },
+        entity2: {
+          name: entity2.name,
+          isStarter: entity2.isStarter,
+          tokenId: entity2.tokenId,
+        },
+      });
+
+      if (!gameState.address || mergeInProgress) {
+        console.log("❌ [MERGE FLOW] Merge blocked:", {
+          hasAddress: !!gameState.address,
+          mergeInProgress,
+        });
+        return;
+      }
 
       setMergeInProgress(true);
       setGameState((prev) => ({ ...prev, error: null }));
 
       try {
-        console.log(
-          `Requesting merge for entities ${entity1Id} and ${entity2Id}`
-        );
+        console.log("📝 [MERGE FLOW] Validating entities...");
 
-        // Validate entities exist and are owned by the player
-        const entity1 = gameState.entities.find((e) => e.tokenId === entity1Id);
-        const entity2 = gameState.entities.find((e) => e.tokenId === entity2Id);
-
+        // Validate entities
         if (!entity1 || !entity2) {
-          throw new Error(
-            "One or both selected entities not found in your collection"
-          );
+          console.log("❌ [MERGE FLOW] Entity validation failed:", {
+            entity1Exists: !!entity1,
+            entity2Exists: !!entity2,
+          });
+          throw new Error("One or both selected entities not found");
         }
 
-        if (entity1Id === entity2Id) {
+        if (
+          entity1.name === entity2.name &&
+          !entity1.isStarter &&
+          !entity2.isStarter &&
+          entity1.tokenId === entity2.tokenId
+        ) {
+          console.log("❌ [MERGE FLOW] Same entity error:", {
+            entity1Name: entity1.name,
+            entity2Name: entity2.name,
+            entity1TokenId: entity1.tokenId,
+            entity2TokenId: entity2.tokenId,
+          });
           throw new Error("Cannot merge an entity with itself");
         }
 
+        console.log("✅ [MERGE FLOW] Entity validation passed");
+
         // Check if player can merge (cooldown check)
+        console.log("⏰ [MERGE FLOW] Checking merge cooldown...");
         const canMerge = await contractService.canPlayerMerge(
           gameState.address
         );
+        console.log("🔍 [MERGE FLOW] Cooldown check result:", { canMerge });
+
         if (!canMerge) {
+          console.log("❌ [MERGE FLOW] Cooldown active");
           throw new Error(
             "Merge cooldown active. Please wait before requesting another merge."
           );
         }
 
+        // Prepare merge data for the new contract signature
+        const entity1TokenId = entity1.isStarter ? 0 : entity1.tokenId;
+        const entity2TokenId = entity2.isStarter ? 0 : entity2.tokenId;
+
+        console.log("📦 [MERGE FLOW] Prepared contract parameters:", {
+          entity1Name: entity1.name,
+          entity2Name: entity2.name,
+          entity1IsStarter: entity1.isStarter,
+          entity2IsStarter: entity2.isStarter,
+          entity1TokenId,
+          entity2TokenId,
+        });
+
         // Initiate merge transaction via contract
+        console.log("🔗 [MERGE FLOW] Initiating blockchain transaction...");
         console.log(
-          `Initiating merge transaction for entities ${entity1Id} and ${entity2Id}`
+          `🔗 [MERGE FLOW] Transaction details: ${entity1.name} (starter: ${entity1.isStarter}) + ${entity2.name} (starter: ${entity2.isStarter})`
         );
-        console.log(`Entity 1: ${entity1.name} (${entity1.tokenId})`);
-        console.log(`Entity 2: ${entity2.name} (${entity2.tokenId})`);
 
         const txResult = await contractService.requestMerge(
-          entity1Id,
-          entity2Id
+          entity1.name,
+          entity2.name,
+          entity1.isStarter,
+          entity2.isStarter,
+          entity1TokenId,
+          entity2TokenId
         );
-        console.log("Merge transaction successful:", txResult);
+        console.log(
+          "✅ [MERGE FLOW] Blockchain transaction successful:",
+          txResult
+        );
 
         // Reload data to get the new pending request
+        console.log("🔄 [MERGE FLOW] Reloading player data...");
         await loadPlayerData(gameState.address);
+        console.log("✅ [MERGE FLOW] Player data reloaded");
 
         // Start auto-finalization for the newest pending request
-        // The requestId is typically the latest one after refresh
+        console.log("🤖 [MERGE FLOW] Setting up auto-finalization...");
         setTimeout(async () => {
           try {
-            // Get updated pending requests
+            console.log("🔍 [MERGE FLOW] Fetching updated pending requests...");
             const response = await fetch(
               `/api/game/entities?address=${gameState.address}`
             );
             const data = await response.json();
+
+            console.log("📊 [MERGE FLOW] Updated game state:", {
+              success: data.success,
+              pendingRequestsCount: data.pendingRequests?.length || 0,
+              pendingRequests: data.pendingRequests,
+            });
+
             if (data.success && data.pendingRequests?.length > 0) {
-              // Auto-finalize the most recent request ONLY if not already auto-finalizing
-              const latestRequestId = Math.max(...data.pendingRequests);
+              const latestRequestId = BigInt(Math.max(...data.pendingRequests));
+              console.log(
+                "🎯 [MERGE FLOW] Latest request ID:",
+                latestRequestId.toString()
+              );
+
               if (!autoFinalizingRequests.has(latestRequestId)) {
                 console.log(
-                  `🚀 Starting auto-finalization for request ${latestRequestId}`
+                  `🚀 [MERGE FLOW] Starting auto-finalization for request ${latestRequestId}`
                 );
-                autoFinalizeMerge(latestRequestId);
+                autoFinalizeMerge(latestRequestId, entity1.name, entity2.name);
               } else {
                 console.log(
-                  `⏭️ Request ${latestRequestId} already being auto-finalized, skipping`
+                  `⏭️ [MERGE FLOW] Request ${latestRequestId} already being auto-finalized, skipping`
                 );
               }
+            } else {
+              console.log(
+                "⚠️ [MERGE FLOW] No pending requests found after merge"
+              );
             }
           } catch (error) {
-            console.error("Failed to start auto-finalization:", error);
+            console.error(
+              "❌ [MERGE FLOW] Failed to start auto-finalization:",
+              error
+            );
           }
-        }, 1000); // Small delay to ensure data is loaded
+        }, 1000);
 
+        console.log(
+          "🎉 [MERGE FLOW] Merge request completed successfully:",
+          txResult
+        );
         return txResult;
       } catch (error: any) {
-        console.error("Merge request failed:", error);
+        console.error("❌ [MERGE FLOW] Merge request failed:", error);
+        console.log("🔍 [MERGE FLOW] Error details:", {
+          message: error.message,
+          code: error.code,
+          data: error.data,
+          reason: error.reason,
+        });
 
         // Provide more specific error messages
         let errorMessage = error.message || "Failed to request merge";
 
         if (error.message.includes("execution reverted")) {
+          console.log("⚠️ [MERGE FLOW] Smart contract execution reverted");
           if (error.data === "0x1f6a65b6") {
             errorMessage =
               "Merge request failed. Please ensure you own both entities and the merge cooldown has passed.";
@@ -399,11 +604,15 @@ export function useGame() {
               "Smart contract execution failed. Please check your entity ownership and try again.";
           }
         } else if (error.message.includes("user rejected")) {
+          console.log("👤 [MERGE FLOW] User rejected transaction");
           errorMessage = "Transaction was cancelled by user.";
         } else if (error.message.includes("insufficient funds")) {
+          console.log("💰 [MERGE FLOW] Insufficient funds for gas");
           errorMessage =
             "Insufficient ETH for gas fees. Please add funds to your wallet.";
         }
+
+        console.log("📝 [MERGE FLOW] Final error message:", errorMessage);
 
         setGameState((prev) => ({
           ...prev,
@@ -411,20 +620,21 @@ export function useGame() {
         }));
         throw error;
       } finally {
+        console.log("🏁 [MERGE FLOW] Cleaning up merge in progress state");
         setMergeInProgress(false);
       }
     },
     [
       gameState.address,
-      gameState.entities,
       mergeInProgress,
       loadPlayerData,
       autoFinalizeMerge,
+      autoFinalizingRequests,
     ]
   );
 
   const finalizeMerge = useCallback(
-    async (requestId: number) => {
+    async (requestId: bigint) => {
       if (!gameState.address || finalizeInProgress.includes(requestId)) return;
 
       setFinalizeInProgress((prev) => [...prev, requestId]);
@@ -438,7 +648,7 @@ export function useGame() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             address: gameState.address,
-            requestId,
+            requestId: requestId.toString(), // Convert bigint to string for JSON
           }),
         });
 
@@ -449,6 +659,9 @@ export function useGame() {
 
           // Refresh player data to show new entity and remove pending request
           await loadPlayerData(gameState.address);
+
+          // Complete the hatch timer for this request
+          completeHatchTimer(requestId);
 
           return {
             success: true,
@@ -484,7 +697,7 @@ export function useGame() {
         setFinalizeInProgress((prev) => prev.filter((id) => id !== requestId));
       }
     },
-    [gameState.address, finalizeInProgress, loadPlayerData]
+    [gameState.address, finalizeInProgress, loadPlayerData, completeHatchTimer]
   );
 
   const clearError = useCallback(() => {
@@ -494,6 +707,38 @@ export function useGame() {
   const refreshData = useCallback(async () => {
     if (gameState.address) {
       await loadPlayerData(gameState.address);
+    }
+  }, [gameState.address, loadPlayerData]);
+
+  // Claim starter entities for new players
+  const claimStarterEntity = useCallback(async () => {
+    if (!gameState.address) return;
+
+    setGameState((prev) => ({ ...prev, loading: true, error: null }));
+
+    try {
+      const response = await fetch("/api/game/claim-starter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: gameState.address }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        await loadPlayerData(gameState.address);
+        return data;
+      } else {
+        throw new Error(data.error || "Failed to claim starter entities");
+      }
+    } catch (error: any) {
+      console.error("Failed to claim starter entities:", error);
+      setGameState((prev) => ({
+        ...prev,
+        loading: false,
+        error: error.message,
+      }));
+      throw error;
     }
   }, [gameState.address, loadPlayerData]);
 
@@ -563,13 +808,6 @@ export function useGame() {
     }
   }, [gameState.address, loadPlayerData]);
 
-  // Cleanup intervals on unmount
-  useEffect(() => {
-    return () => {
-      // No intervals to clear in the simplified version
-    };
-  }, []);
-
   // Auto-start finalization for existing pending requests when component mounts
   useEffect(() => {
     if (gameState.connected && gameState.pendingRequests.length > 0) {
@@ -595,12 +833,15 @@ export function useGame() {
     finalizeInProgress,
     autoFinalizingRequests,
     connectWallet,
-    claimStarterEntity,
     requestMerge,
     finalizeMerge,
     loadPlayerData,
     refreshData,
     clearError,
     addNFTToWallet, // Export the function for manual use
+    claimStarterEntity, // Export the claimStarterEntity function
+    hatchTimers, // Expose hatch timers state
+    startHatchTimer, // Expose function to start hatch timer
+    completeHatchTimer, // Expose function to complete hatch timer
   };
 }

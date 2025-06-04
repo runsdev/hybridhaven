@@ -1,66 +1,183 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextRequest, NextResponse } from "next/server";
 import { createBackendContractService } from "@/lib/contracts";
 import { generateAndUploadHybridImage } from "@/lib/ipfs";
 import { calculateRarity } from "@/lib/utils";
 
 export async function POST(request: NextRequest) {
-  try {
-    const { address, entity1Id, entity2Id } = await request.json();
+  console.log(
+    "🌐 [API] POST /api/game/merge - Merge preparation request received"
+  );
 
-    if (!address || !entity1Id || !entity2Id) {
+  try {
+    const body = await request.json();
+    console.log("📥 [API] Request body:", {
+      hasAddress: !!body.address,
+      hasEntity1: !!body.entity1,
+      hasEntity2: !!body.entity2,
+      entity1Name: body.entity1?.name,
+      entity2Name: body.entity2?.name,
+      entity1IsStarter: body.entity1?.isStarter,
+      entity2IsStarter: body.entity2?.isStarter,
+    });
+
+    const { address, entity1, entity2 } = body;
+
+    if (!address || !entity1 || !entity2) {
+      console.log("❌ [API] Missing required fields:", {
+        hasAddress: !!address,
+        hasEntity1: !!entity1,
+        hasEntity2: !!entity2,
+      });
       return NextResponse.json(
         {
           success: false,
-          error: "Address and entity IDs required",
+          error: "Address and entities required",
         },
         { status: 400 }
       );
     }
+
+    // Validate entity structure
+    if (
+      !entity1.name ||
+      !entity2.name ||
+      typeof entity1.isStarter !== "boolean" ||
+      typeof entity2.isStarter !== "boolean"
+    ) {
+      console.log("❌ [API] Invalid entity structure:", {
+        entity1Name: entity1.name,
+        entity2Name: entity2.name,
+        entity1IsStarter: typeof entity1.isStarter,
+        entity2IsStarter: typeof entity2.isStarter,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid entity structure. Each entity must have name and isStarter properties",
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log("✅ [API] Entity structure validation passed");
 
     const backendService = createBackendContractService();
 
     // Check if player can merge
+    console.log("⏰ [API] Checking merge cooldown...");
     const canMerge = await backendService.canPlayerMerge(address);
+    console.log("🔍 [API] Cooldown check result:", { canMerge });
+
     if (!canMerge) {
+      console.log("❌ [API] Merge cooldown active");
       return NextResponse.json(
         {
           success: false,
-          error: "Merge cooldown active or insufficient entities",
+          error: "Merge cooldown active",
         },
         { status: 400 }
       );
     }
 
-    // Get entity details to validate ownership and get names
+    // Get player entities to validate ownership for hybrid entities
+    console.log("📋 [API] Fetching player entities for validation...");
     const entities = await backendService.getPlayerEntities(address);
-    const entity1 = entities.find((e) => e.tokenId === entity1Id);
-    const entity2 = entities.find((e) => e.tokenId === entity2Id);
+    console.log("📊 [API] Player entities count:", {
+      total: entities.length,
+      starters: entities.filter((e) => e.isStarter).length,
+      hybrids: entities.filter((e) => !e.isStarter).length,
+    });
 
-    if (!entity1 || !entity2) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "One or both entities not found or not owned by player",
-        },
-        { status: 400 }
+    // Validate entity ownership and get token IDs for hybrid entities
+    let entity1TokenId = 0; // Default for starter entities
+    let entity2TokenId = 0; // Default for starter entities
+
+    console.log("🔍 [API] Validating entity ownership...");
+
+    if (!entity1.isStarter) {
+      console.log("🔍 [API] Validating hybrid entity 1 ownership...");
+      const foundEntity1 = entities.find(
+        (e) => !e.isStarter && e.name === entity1.name
       );
+      if (!foundEntity1) {
+        console.log("❌ [API] Entity 1 not found:", {
+          searchName: entity1.name,
+          availableHybrids: entities
+            .filter((e) => !e.isStarter)
+            .map((e) => e.name),
+        });
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Entity 1 not found or not owned by player",
+          },
+          { status: 400 }
+        );
+      }
+      entity1TokenId = foundEntity1.tokenId;
+      console.log("✅ [API] Entity 1 ownership validated:", {
+        name: foundEntity1.name,
+        tokenId: entity1TokenId,
+      });
     }
 
-    // Note: The actual merge request should be initiated by the player's wallet on the frontend
-    // This backend endpoint is for processing the completion after VRF fulfillment
-    // For now, we'll return instructions for the frontend to handle the transaction
+    if (!entity2.isStarter) {
+      console.log("🔍 [API] Validating hybrid entity 2 ownership...");
+      const foundEntity2 = entities.find(
+        (e) => !e.isStarter && e.name === entity2.name
+      );
+      if (!foundEntity2) {
+        console.log("❌ [API] Entity 2 not found:", {
+          searchName: entity2.name,
+          availableHybrids: entities
+            .filter((e) => !e.isStarter)
+            .map((e) => e.name),
+        });
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Entity 2 not found or not owned by player",
+          },
+          { status: 400 }
+        );
+      }
+      entity2TokenId = foundEntity2.tokenId;
+      console.log("✅ [API] Entity 2 ownership validated:", {
+        name: foundEntity2.name,
+        tokenId: entity2TokenId,
+      });
+    }
 
-    return NextResponse.json({
+    const responseData = {
       success: true,
       message:
         "Please initiate the merge transaction from your wallet. The backend will process the completion once randomness is fulfilled.",
       entities: {
-        entity1: { id: entity1Id, name: entity1.name },
-        entity2: { id: entity2Id, name: entity2.name },
+        entity1: {
+          name: entity1.name,
+          isStarter: entity1.isStarter,
+          tokenId: entity1TokenId,
+        },
+        entity2: {
+          name: entity2.name,
+          isStarter: entity2.isStarter,
+          tokenId: entity2TokenId,
+        },
       },
-    });
+    };
+
+    console.log("✅ [API] Merge preparation successful:", responseData);
+    return NextResponse.json(responseData);
   } catch (error: any) {
-    console.error("Error preparing merge:", error);
+    console.error("❌ [API] Error preparing merge:", error);
+    console.log("🔍 [API] Error details:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
     return NextResponse.json(
       {
         success: false,
@@ -126,17 +243,14 @@ export async function PUT(request: NextRequest) {
     const rarity = calculateRarity(BigInt(randomness));
 
     // Generate AI image and upload to IPFS
-    const { imageURI, metadata } = await generateAndUploadHybridImage(
-      entity1Name,
-      entity2Name,
-      rarity
-    );
+    const { metadataURI, imageURI, metadata } =
+      await generateAndUploadHybridImage(entity1Name, entity2Name, rarity);
 
-    // Complete merge on blockchain - updated to match actual contract signature
+    // Complete merge on blockchain - updated to use metadataURI
     const completionResult = await backendService.completeMerge(
       requestId,
       metadata.name,
-      imageURI
+      metadataURI // Pass metadata JSON URI to contract, not image URI
     );
 
     return NextResponse.json({
@@ -144,7 +258,8 @@ export async function PUT(request: NextRequest) {
       newEntityId: completionResult.newEntityId,
       name: metadata.name,
       rarity: completionResult.rarity, // Get rarity from blockchain result
-      imageURI,
+      imageURI, // Frontend can use this for direct display
+      metadataURI, // Contract stores this
       metadata,
     });
   } catch (error: any) {
@@ -161,10 +276,25 @@ export async function PUT(request: NextRequest) {
 
 // Finalize pending merge requests
 export async function PATCH(request: NextRequest) {
+  console.log(
+    "🌐 [API] PATCH /api/game/merge - Merge finalization request received"
+  );
+
   try {
-    const { address, requestId } = await request.json();
+    const body = await request.json();
+    const { address, requestId } = body;
+
+    console.log("📥 [API] PATCH Request parameters:", {
+      address: address ? `${address.slice(0, 6)}...${address.slice(-4)}` : null,
+      requestId: requestId ? requestId.toString() : null,
+      hasAddress: !!address,
+      hasRequestId: !!requestId,
+    });
+
+    String(requestId); // Ensure requestId is a string for validation
 
     if (!address || !requestId) {
+      console.log("❌ [API] Missing required parameters");
       return NextResponse.json(
         {
           success: false,
@@ -174,25 +304,47 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    console.log("🔗 [API] Creating backend contract service...");
     const backendService = createBackendContractService();
 
+    // Convert requestId string back to bigint for contract calls
+    const requestIdBigInt = BigInt(requestId);
+    console.log("🔄 [API] Converted request ID:", {
+      original: requestId,
+      bigint: requestIdBigInt.toString(),
+    });
+
     // Get the merge request details first
+    console.log("📋 [API] Fetching merge request details...");
     let mergeRequest;
     try {
-      mergeRequest = await backendService.getMergeRequest(requestId);
+      mergeRequest = await backendService.getMergeRequest(requestIdBigInt);
+      console.log(`📋 [API] Merge request ${requestId} details:`, {
+        player: mergeRequest.player,
+        requestingAddress: address,
+        entity1Name: mergeRequest.entity1Name,
+        entity2Name: mergeRequest.entity2Name,
+        entity1IsStarter: mergeRequest.entity1IsStarter,
+        entity2IsStarter: mergeRequest.entity2IsStarter,
+        entity1TokenId: mergeRequest.entity1TokenId,
+        entity2TokenId: mergeRequest.entity2TokenId,
+        fulfilled: mergeRequest.fulfilled,
+      });
     } catch (error) {
       console.error("Error fetching merge request:", error);
       return NextResponse.json(
         {
           success: false,
-          error: "Merge request not found or invalid",
+          error:
+            "Failed to fetch merge request from blockchain. Please try again.",
         },
-        { status: 400 }
+        { status: 500 }
       );
     }
 
     // Check if already fulfilled
     if (mergeRequest.fulfilled) {
+      console.log("ℹ️ [API] Merge request already fulfilled");
       return NextResponse.json(
         {
           success: false,
@@ -202,46 +354,21 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Verify the request belongs to the player
-    if (mergeRequest.player.toLowerCase() !== address.toLowerCase()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized: This merge request doesn't belong to you",
-        },
-        { status: 403 }
-      );
-    }
-
-    // Get entity names for the merge - handle case where entities might be burned after merge request
-    const entities = await backendService.getPlayerEntities(address);
-    let entity1Name = "Unknown";
-    let entity2Name = "Unknown";
-
-    // Try to find the entities in current collection
-    const entity1 = entities.find((e) => e.tokenId === mergeRequest.entity1Id);
-    const entity2 = entities.find((e) => e.tokenId === mergeRequest.entity2Id);
-
-    if (entity1) entity1Name = entity1.name;
-    if (entity2) entity2Name = entity2.name;
-
-    // If entities not found, they may have been burned after merge request
-    // Use fallback names based on common patterns
-    if (!entity1 || !entity2) {
-      console.warn(
-        `Entities ${mergeRequest.entity1Id}/${mergeRequest.entity2Id} not found in current collection, using fallback names`
-      );
-
-      // Try to get names from blockchain event logs or use generic names
-      entity1Name = entity1?.name || `Entity${mergeRequest.entity1Id}`;
-      entity2Name = entity2?.name || `Entity${mergeRequest.entity2Id}`;
-    }
+    const entity1Name = mergeRequest.entity1Name;
+    const entity2Name = mergeRequest.entity2Name;
 
     // Check if VRF has been fulfilled
+    console.log("🎲 [API] Checking VRF randomness...");
     let randomness: number;
     try {
-      randomness = await backendService.getRandomnessResult(requestId);
+      console.log(
+        `🔍 [API] Checking VRF result for request ID: ${requestIdBigInt}`
+      );
+      randomness = await backendService.getRandomnessResult(requestIdBigInt);
+      console.log("🎲 [API] VRF randomness result:", { randomness });
+
       if (randomness === 0) {
+        console.log("⏳ [API] VRF randomness not yet fulfilled");
         return NextResponse.json(
           {
             success: false,
@@ -251,36 +378,76 @@ export async function PATCH(request: NextRequest) {
           { status: 400 }
         );
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error("⚠️ [API] VRF randomness check failed:", error);
+      console.log("🔍 [API] VRF error details:", {
+        message: error.message,
+        reason: error.reason,
+        code: error.code,
+      });
+
+      if (
+        error.reason === "request not found" ||
+        error.message.includes("request not found")
+      ) {
+        console.log(
+          "❌ [API] VRF request not found - this indicates the merge transaction failed"
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "VRF request not found. The merge transaction may have failed. Please check the transaction status and try creating a new merge request.",
+          },
+          { status: 400 }
+        );
+      }
+
       // If we can't get VRF result, generate a fallback for testing
       console.warn(
-        "Could not get VRF result, using fallback randomness:",
-        error
+        "⚠️ [API] Could not get VRF result, using fallback randomness:",
+        error.message
       );
       randomness = Math.floor(Math.random() * 10000) + 1;
+      console.log("🎲 [API] Using fallback randomness:", { randomness });
     }
 
     // Calculate rarity from randomness
     const rarity = calculateRarity(BigInt(randomness));
+    console.log("⭐ [API] Calculated rarity:", { rarity, randomness });
 
     // Generate AI image and upload to IPFS
-    console.log(`Generating hybrid image for: ${entity1Name} + ${entity2Name}`);
-    const { imageURI, metadata } = await generateAndUploadHybridImage(
-      entity1Name,
-      entity2Name,
-      rarity
+    console.log(
+      `🧬 [API] Generating hybrid image for: ${entity1Name} + ${entity2Name} (${rarity}⭐)`
     );
+    const { metadataURI, imageURI, metadata } =
+      await generateAndUploadHybridImage(entity1Name, entity2Name, rarity);
+    console.log("📸 [API] Image generated and uploaded:", {
+      imageURI,
+      metadataName: metadata.name,
+    });
 
     // Complete merge on blockchain with better error handling
+    console.log("🔗 [API] Completing merge on blockchain...");
     let completionResult;
     try {
       completionResult = await backendService.completeMerge(
-        requestId,
+        requestIdBigInt,
         metadata.name,
-        imageURI
+        metadataURI
+      );
+      console.log(
+        "✅ [API] Blockchain merge completion successful:",
+        completionResult
       );
     } catch (contractError: any) {
-      console.error("Contract completion error:", contractError);
+      console.error("❌ [API] Contract completion error:", contractError);
+      console.log("🔍 [API] Contract error details:", {
+        message: contractError.message,
+        reason: contractError.reason,
+        code: contractError.code,
+        data: contractError.data,
+      });
 
       // Check if the error indicates the merge is already complete
       if (
@@ -288,6 +455,7 @@ export async function PATCH(request: NextRequest) {
         contractError.message.includes("already fulfilled") ||
         contractError.reason === "Request already fulfilled"
       ) {
+        console.log("ℹ️ [API] Merge already fulfilled");
         return NextResponse.json(
           {
             success: false,
@@ -299,6 +467,7 @@ export async function PATCH(request: NextRequest) {
 
       // For transaction revert errors, provide more specific feedback
       if (contractError.code === "CALL_EXCEPTION") {
+        console.log("⚠️ [API] Smart contract call exception");
         return NextResponse.json(
           {
             success: false,
@@ -313,7 +482,13 @@ export async function PATCH(request: NextRequest) {
       throw contractError;
     }
 
-    return NextResponse.json({
+    console.log(`🎉 [API] Merge ${requestId} completed successfully:`, {
+      newEntityId: completionResult.newEntityId,
+      name: metadata.name,
+      rarity: completionResult.rarity,
+    });
+
+    const responseData = {
       success: true,
       message: "Merge finalized successfully!",
       newEntityId: completionResult.newEntityId,
@@ -321,9 +496,17 @@ export async function PATCH(request: NextRequest) {
       rarity: completionResult.rarity,
       imageURI,
       metadata,
-    });
+    };
+
+    console.log("✅ [API] PATCH response prepared:", responseData);
+    return NextResponse.json(responseData);
   } catch (error: any) {
-    console.error("Error finalizing merge:", error);
+    console.error("❌ [API] Error finalizing merge:", error);
+    console.log("🔍 [API] Final error details:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
 
     // Provide more specific error messages
     let errorMessage = "Failed to finalize merge";
@@ -341,6 +524,7 @@ export async function PATCH(request: NextRequest) {
         "Smart contract execution failed. Please check the merge request status.";
     }
 
+    console.log("📝 [API] Final error message:", errorMessage);
     return NextResponse.json(
       {
         success: false,
@@ -348,64 +532,5 @@ export async function PATCH(request: NextRequest) {
       },
       { status: 500 }
     );
-  }
-}
-
-// Background process to monitor and complete merges when VRF is fulfilled
-async function processMergeCompletion(
-  requestId: number,
-  entity1Name: string,
-  entity2Name: string,
-  backendService: any
-) {
-  try {
-    // Poll for VRF fulfillment (in production, use event listeners)
-    let attempts = 0;
-    const maxAttempts = 60; // 5 minutes with 5-second intervals
-
-    while (attempts < maxAttempts) {
-      try {
-        const randomness = await backendService.getRandomnessResult(requestId);
-
-        if (randomness > 0) {
-          // VRF fulfilled, complete the merge
-          const rarity = calculateRarity(BigInt(randomness));
-
-          // Generate AI image and upload to IPFS
-          const { imageURI, metadata } = await generateAndUploadHybridImage(
-            entity1Name,
-            entity2Name,
-            rarity
-          );
-
-          // Complete merge on blockchain
-          const completionResult = await backendService.completeMerge(
-            requestId,
-            metadata.name,
-            imageURI
-          );
-
-          console.log("Merge completed successfully:", {
-            requestId,
-            newEntityId: completionResult.newEntityId,
-            name: metadata.name,
-            rarity: completionResult.rarity,
-            imageURI,
-          });
-
-          return;
-        }
-      } catch (vrfError) {
-        // VRF not ready yet, continue polling
-      }
-
-      // Wait 5 seconds before next attempt
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      attempts++;
-    }
-
-    console.error("VRF request timed out for merge request:", requestId);
-  } catch (error) {
-    console.error("Error completing merge:", error);
   }
 }

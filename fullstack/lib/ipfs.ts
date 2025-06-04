@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+
 import { GoogleGenAI } from "@google/genai";
-import { Readable } from "stream";
 import { pinata } from "@/utils/config";
 
 // Validate environment variables
@@ -13,65 +14,126 @@ export async function generateAndUploadHybridImage(
   entity1Name: string,
   entity2Name: string,
   rarity: number
-): Promise<{ imageURI: string; metadata: any }> {
-  validateIPFSEnvironment();
-
+): Promise<{ metadataURI: string; imageURI: string; metadata: any }> {
   try {
-    // Generate hybrid creature description using Gemini
     const description = await generateHybridDescription(
       entity1Name,
       entity2Name,
       rarity
     );
-
-    // Generate hybrid name
     const hybridName = await generateHybridName(
       entity1Name,
       entity2Name,
       description
     );
 
-    // For now, we'll create a placeholder image with the description
-    // In a full implementation, you'd use an image generation service
-    const imageData = await createPlaceholderImage(
-      entity1Name,
-      entity2Name,
-      rarity,
-      description
-    );
+    // Generate image using Google AI
+    let imageBuffer: Buffer;
+    try {
+      const prompt = `Create a fantasy creature that is a hybrid fusion of ${entity1Name} and ${entity2Name}. 
+        The creature should be ${getRarityDescriptor(
+          rarity
+        )} tier quality with magical ethereal effects. 
+        Style: digital art, fantasy game character, detailed, vibrant colors, magical aura.
+        Background: mystical environment suitable for a ${getRarityDescriptor(
+          rarity
+        )} rarity creature.`;
 
-    // Create metadata object for key-value store
-    const metadata = {
-      name: hybridName,
-      description: await generateShortHybridDescription(
+      imageBuffer = await createPlaceholderImage(
         entity1Name,
         entity2Name,
-        rarity
-      ),
-      rarity: rarity,
+        rarity,
+        description
+      );
+    } catch (aiError) {
+      console.warn("AI image generation failed, using fallback:", aiError);
+      imageBuffer = await createSVGFallback(
+        entity1Name,
+        entity2Name,
+        rarity,
+        description
+      );
+    }
+
+    // 1. Upload image first and get the image URI
+    const imageFilename = `${hybridName}-${Date.now()}.png`;
+    const imageURI = await uploadImageWithMetadata(imageBuffer, imageFilename, {
+      name: hybridName,
+      rarity: rarity.toString(),
       parent1: entity1Name,
       parent2: entity2Name,
       type: "Hybrid",
+      game: "HybridHaven",
+    });
+
+    console.log("🖼️ [IPFS] Image uploaded:", imageURI);
+
+    // 2. Create metadata JSON with proper image reference
+    const metadata = {
+      name: hybridName,
+      description,
+      image: formatIPFSUrl(imageURI), // Use HTTP URL for the image
       external_url: "https://hybridhaven.runs.my.id",
-      background_color: getRarityColor(rarity),
-      created_at: new Date().toISOString(),
+      background_color: getRarityHexColor(rarity).replace("#", ""), // Remove # for OpenSea
+      attributes: [
+        {
+          trait_type: "Rarity",
+          value: getRarityDescriptor(rarity),
+        },
+        {
+          trait_type: "Star Rating",
+          value: rarity,
+          max_value: 5,
+          display_type: "number",
+        },
+        {
+          trait_type: "Type",
+          value: "Hybrid",
+        },
+        {
+          trait_type: "Parent 1",
+          value: entity1Name,
+        },
+        {
+          trait_type: "Parent 2",
+          value: entity2Name,
+        },
+        {
+          trait_type: "Generation",
+          value: "F1",
+          display_type: "string",
+        },
+        {
+          trait_type: "Created Date",
+          value: Math.floor(Date.now() / 1000),
+          display_type: "date",
+        },
+      ],
+      // OpenSea collection information
+      collection: {
+        name: "HybridHaven Entities",
+        family: "HybridHaven",
+      },
+      // Additional OpenSea fields
+      animation_url: null,
+      youtube_url: null,
     };
 
-    // Create shorter, sanitized filename
-    const sanitizedName = sanitizeFilename(hybridName);
-    const shortFilename = `${sanitizedName}_${rarity}star.png`;
+    // 3. Upload metadata JSON to IPFS
+    console.log("📄 [IPFS] Uploading metadata JSON to IPFS...");
+    const metadataFilename = `${hybridName}-metadata-${Date.now()}.json`;
+    const metadataURI = await uploadMetadataJSON(metadata, metadataFilename);
+    console.log("✅ [IPFS] Metadata JSON uploaded:", metadataURI);
 
-    // Upload image to IPFS with metadata as key-value pairs
-    const imageURI = await uploadImageWithMetadata(
-      imageData,
-      shortFilename,
-      metadata
-    );
-
-    return { imageURI, metadata: { ...metadata, imageURI } };
+    // Return both URIs - contract uses metadataURI, frontend can use both
+    return {
+      metadataURI, // Points to JSON file for contract
+      imageURI, // Points to image file for direct access
+      metadata, // The actual metadata object
+    };
   } catch (error) {
-    console.error("Error generating and uploading hybrid image:", error);
-    throw new Error("Failed to generate hybrid creature");
+    console.error("Error generating hybrid image and metadata:", error);
+    throw new Error("Failed to generate hybrid content");
   }
 }
 
@@ -129,58 +191,58 @@ async function generateHybridDescription(
   }
 }
 
-async function generateShortHybridDescription(
-  entity1: string,
-  entity2: string,
-  rarity: number
-): Promise<string> {
-  try {
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY || "",
-    });
+// async function generateShortHybridDescription(
+//   entity1: string,
+//   entity2: string,
+//   rarity: number
+// ): Promise<string> {
+//   try {
+//     const ai = new GoogleGenAI({
+//       apiKey: process.env.GEMINI_API_KEY || "",
+//     });
 
-    const config = {
-      responseMimeType: "text/plain",
-    };
+//     const config = {
+//       responseMimeType: "text/plain",
+//     };
 
-    const model = "gemini-2.0-flash";
+//     const model = "gemini-2.0-flash";
 
-    const contents = [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Create a short, engaging description for a hybrid creature that combines "${entity1}" and "${entity2}". 
-            This is a ${rarity}-star rarity creature (1=common, 5=legendary). 
-            
-            The description MUST be less than 200 characters and include:
-            - Unique traits from both parent entities
-            - A hint of its mystical or elemental nature
-            
-            Keep it concise and suitable for a fantasy NFT game. Don't mention NFT or blockchain and don't use any markdown syntax.`,
-          },
-        ],
-      },
-    ];
+//     const contents = [
+//       {
+//         role: "user",
+//         parts: [
+//           {
+//             text: `Create a short, engaging description for a hybrid creature that combines "${entity1}" and "${entity2}".
+//             This is a ${rarity}-star rarity creature (1=common, 5=legendary).
 
-    const response = await ai.models.generateContentStream({
-      model,
-      config,
-      contents,
-    });
+//             The description MUST be less than 200 characters and include:
+//             - Unique traits from both parent entities
+//             - A hint of its mystical or elemental nature
 
-    let description = "";
-    for await (const chunk of response) {
-      description += chunk.text || "";
-    }
+//             Keep it concise and suitable for a fantasy NFT game. Don't mention NFT or blockchain and don't use any markdown syntax.`,
+//           },
+//         ],
+//       },
+//     ];
 
-    return description.trim();
-  } catch (error) {
-    console.error("Error generating short description:", error);
-    // Fallback description
-    return `A mystical fusion of ${entity1} and ${entity2}, this ${rarity}-star creature embodies the combined essence of its legendary parents.`;
-  }
-}
+//     const response = await ai.models.generateContentStream({
+//       model,
+//       config,
+//       contents,
+//     });
+
+//     let description = "";
+//     for await (const chunk of response) {
+//       description += chunk.text || "";
+//     }
+
+//     return description.trim();
+//   } catch (error) {
+//     console.error("Error generating short description:", error);
+//     // Fallback description
+//     return `A mystical fusion of ${entity1} and ${entity2}, this ${rarity}-star creature embodies the combined essence of its legendary parents.`;
+//   }
+// }
 
 async function generateHybridName(
   entity1: string,
@@ -204,7 +266,7 @@ async function generateHybridName(
         parts: [
           {
             text: `Create a creative hybrid name by combining "${entity1}" and "${entity2}". 
-            The name should be a single word or two that represents a fusion of both entities based on description ${desc}. So just return the name without any additional text and markdown formatting.`,
+            The name should be a single word or two that represents a fusion of both entities based on description ${desc}. So just return the name without any additional text and markdown formatting such as **name**.`,
           },
         ],
       },
@@ -423,7 +485,7 @@ export async function uploadImageToIPFS(
     const upload = await pinata.upload.public.file(
       new File([new Uint8Array(imageBuffer)], filename)
     );
-    return `ipfs://${upload.cid}`;
+    return `${upload.cid}`;
   } catch (error) {
     console.error("Error uploading to IPFS:", error);
     throw new Error("Failed to upload image to IPFS");
@@ -436,24 +498,58 @@ export async function uploadImageWithMetadata(
   metadata: any
 ): Promise<string> {
   try {
-    // Upload with reduced key-value pairs (only 6 essential ones to stay under the 10 limit)
+    // Upload with minimal key-value pairs to stay under character limits
     const upload = await pinata.upload.public
       .file(new File([new Uint8Array(imageBuffer)], filename))
       .keyvalues({
-        name: metadata.name || "",
-        description: metadata.description || "",
+        name: (metadata.name || "").slice(0, 245), // Limit to 50 chars
         rarity: metadata.rarity?.toString() || "1",
-        parent1: metadata.parent1 || "",
-        parent2: metadata.parent2 || "",
-        type: metadata.type || "Entity",
+        parent1: (metadata.parent1 || "").slice(0, 30), // Limit to 30 chars
+        parent2: (metadata.parent2 || "").slice(0, 30), // Limit to 30 chars
+        type: "Hybrid",
         game: "HybridHaven",
-        external_url: metadata.external_url || "https://hybridhaven.runs.my.id",
       });
 
-    return `ipfs://${upload.cid}`;
+    return `${upload.cid}`;
   } catch (error) {
     console.error("Error uploading image with metadata to IPFS:", error);
-    throw new Error("Failed to upload image with metadata to IPFS");
+
+    // Fallback: upload without metadata if keyvalues fail
+    try {
+      console.log("Fallback: uploading without metadata...");
+      const fallbackUpload = await pinata.upload.public.file(
+        new File([new Uint8Array(imageBuffer)], filename)
+      );
+      return `${fallbackUpload.cid}`;
+    } catch (fallbackError) {
+      console.error("Fallback upload also failed:", fallbackError);
+      throw new Error("Failed to upload image to IPFS");
+    }
+  }
+}
+
+// Upload JSON metadata to IPFS
+export async function uploadMetadataJSON(
+  metadata: any,
+  filename: string
+): Promise<string> {
+  try {
+    // Convert metadata to JSON string
+    const jsonString = JSON.stringify(metadata, null, 2);
+    const jsonBuffer = Buffer.from(jsonString, "utf-8");
+
+    // Upload JSON file to IPFS
+    const upload = await pinata.upload.public.file(
+      new File([new Uint8Array(jsonBuffer)], filename, {
+        type: "application/json",
+      })
+    );
+
+    console.log(`✅ [IPFS] JSON metadata uploaded: ${upload.cid}`);
+    return `${upload.cid}`;
+  } catch (error) {
+    console.error("Error uploading JSON metadata to IPFS:", error);
+    throw new Error("Failed to upload JSON metadata to IPFS");
   }
 }
 
@@ -462,9 +558,8 @@ export async function fetchMetadataFromKeyValues(
   ipfsHash: string
 ): Promise<any> {
   try {
-    // List files and filter by IPFS hash to get key-values
     const files = await pinata.files.public.list().keyvalues({
-      game: "HybridHaven", // Filter by our game
+      game: "HybridHaven",
     });
 
     // Find the file by IPFS hash
@@ -476,10 +571,16 @@ export async function fetchMetadataFromKeyValues(
 
     // Convert key-values back to metadata format
     const keyvalues = targetFile.keyvalues;
+
+    let imageUri = "";
+    if (keyvalues.type === "Hybrid") {
+      imageUri = formatIPFSUrl(`ipfs://${ipfsHash}`);
+    }
+
     const metadata = {
       name: keyvalues.name || "",
       description: keyvalues.description || "",
-      image: `ipfs://${ipfsHash}`,
+      image: imageUri, // Properly formatted HTTP URL for the image
       attributes: [
         { trait_type: "Rarity", value: parseInt(keyvalues.rarity || "1") },
         { trait_type: "Parent 1", value: keyvalues.parent1 || "" },
@@ -639,18 +740,29 @@ export function formatIPFSUrl(ipfsUrl: string): string {
     return `https://${gateway}/ipfs/${hash}`;
   }
 
+  // Already a HTTP URL - check if it has double ipfs prefix
+  if (ipfsUrl.startsWith("http")) {
+    // Fix double IPFS prefix issue like: https://gateway.com/ipfs/ipfs://hash
+    if (ipfsUrl.includes("/ipfs/ipfs://")) {
+      const parts = ipfsUrl.split("/ipfs/ipfs://");
+      if (parts.length === 2) {
+        const baseUrl = parts[0];
+        const hash = parts[1];
+        return `${baseUrl}/ipfs/${hash}`;
+      }
+    }
+    return ipfsUrl;
+  }
+
   if (ipfsUrl.startsWith("Qm") || ipfsUrl.startsWith("bafy")) {
     const gateway =
       process.env.NEXT_PUBLIC_GATEWAY_URL || "gateway.pinata.cloud";
     return `https://${gateway}/ipfs/${ipfsUrl}`;
   }
 
-  // Already a HTTP URL
-  if (ipfsUrl.startsWith("http")) {
-    return ipfsUrl;
-  }
-
-  return ipfsUrl;
+  // For any other format, assume it's a hash
+  const gateway = process.env.NEXT_PUBLIC_GATEWAY_URL || "gateway.pinata.cloud";
+  return `https://${gateway}/ipfs/${ipfsUrl}`;
 }
 
 // Sanitize filename to be URL-safe and shorter

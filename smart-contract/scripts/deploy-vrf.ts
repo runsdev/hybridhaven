@@ -152,35 +152,18 @@ async function main() {
     
     try {
         // Deploy ChainlinkVRFConsumer
-        const vrfConsumer = await deployContract("ChainlinkVRFConsumer", [
-            config.vrfCoordinator
-        ]);
-        
-        // Configure VRF Consumer
-        console.log("\n🔄 Configuring VRF Consumer...");
-        const setSubscriptionTx = await vrfConsumer.setSubscriptionId(BigInt(config.subscriptionId || 0));
-        await setSubscriptionTx.wait();
-        
-        const setKeyHashTx = await vrfConsumer.setKeyHash(config.keyHash);
-        await setKeyHashTx.wait();
-        
-        const setVRFConfigTx = await vrfConsumer.setVRFConfig(
-            config.callbackGasLimit,
-            config.requestConfirmations,
-            1 // numWords
-        );
-        await setVRFConfigTx.wait();
-        console.log("✅ VRF Consumer configured");
+        const vrfConsumer = await deployContract("ChainlinkVRFConsumer");
         
         // Save deployment information
         const deploymentInfo = await saveDeploymentInfo({
             vrfConsumer: await vrfConsumer.getAddress()
         });
         
+        
         // Verify contract
         if (network.name !== "hardhat" && network.name !== "localhost") {
             console.log("\n🔍 Starting contract verification...");
-            await verifyContract(await vrfConsumer.getAddress(), [config.vrfCoordinator]);
+            await verifyContract(await vrfConsumer.getAddress(), []);
         }
         
         console.log("\n🎉 VRF Consumer deployment completed successfully!");
@@ -198,11 +181,6 @@ async function main() {
                 const setVRFTx = await gameContract.setVRFConsumer(await vrfConsumer.getAddress());
                 await setVRFTx.wait();
                 console.log("✅ Game Contract updated with new VRF Consumer address");
-                
-                // Authorize Game Contract to call new VRF Consumer
-                const authorizeTx = await vrfConsumer.addAuthorizedCaller(deploymentInfo.gameContract);
-                await authorizeTx.wait();
-                console.log("✅ Game Contract authorized on new VRF Consumer");
             } catch (error) {
                 console.error("❌ Failed to update Game Contract:", error);
                 console.log("⚠️  Please manually update Game Contract with new VRF Consumer address");

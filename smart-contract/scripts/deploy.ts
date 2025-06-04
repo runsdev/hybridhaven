@@ -32,7 +32,7 @@ const NETWORK_CONFIG: Record<string, {
     sepolia: {
         vrfCoordinator: "0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B",
         keyHash: "0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae",
-        subscriptionId: process.env.VRF_SUBSCRIPTION_ID ? Number(process.env.VRF_SUBSCRIPTION_ID) : 1, // Default to 1 if not provided
+        subscriptionId: process.env.VRF_SUBSCRIPTION_ID ? Number(process.env.VRF_SUBSCRIPTION_ID) : undefined,
         callbackGasLimit: 2500000,
         requestConfirmations: 3
     }
@@ -45,6 +45,7 @@ interface DeploymentAddresses {
     network: string;
     deployer: string;
     timestamp: string;
+    vrfSubscriptionId?: string;
 }
 
 async function deployContract(
@@ -132,55 +133,41 @@ async function main() {
     console.log(`🔧 Using VRF Coordinator: ${config.vrfCoordinator}`);
     
     try {
-        // Deploy ChainlinkVRFConsumer (only needs VRF coordinator address)
-        const vrfConsumer = await deployContract("ChainlinkVRFConsumer", [
-            config.vrfCoordinator
-        ]);
+        // Deploy ChainlinkVRFConsumer (no constructor parameters - hardcoded for Sepolia)
+        const vrfConsumer = await deployContract("ChainlinkVRFConsumer");
         
-        // Deploy NFTContract
+        // Configure VRF Consumer settings if needed (for non-Sepolia networks)
+        if (network.name !== "sepolia") {
+            console.log("📝 Configuring VRF Consumer for non-Sepolia network...");
+            
+            // Note: The current VRF contract is hardcoded for Sepolia
+            // For other networks, you might need a different VRF contract or configuration functions
+            console.log("⚠️  WARNING: VRF Consumer is hardcoded for Sepolia. May not work on other networks.");
+        }
+        
+        // Deploy NFTContract (no constructor parameters)
         const nftContract = await deployContract("NFTContract");
         
-        // Deploy GameContract (no constructor parameters needed)
+        // Deploy GameContract (no constructor parameters)
         const gameContract = await deployContract("GameContract");
 
         console.log("\n🔄 Setting up contract configurations...");
-        
-        // Configure VRF Consumer
-        console.log("📝 Configuring VRF Consumer...");
-        const setSubscriptionTx = await vrfConsumer.setSubscriptionId(BigInt(config.subscriptionId || 0));
-        await setSubscriptionTx.wait();
-        
-        const setKeyHashTx = await vrfConsumer.setKeyHash(config.keyHash);
-        await setKeyHashTx.wait();
-        
-        const setVRFConfigTx = await vrfConsumer.setVRFConfig(
-            config.callbackGasLimit,
-            config.requestConfirmations,
-            1 // numWords
-        );
-        await setVRFConfigTx.wait();
-        console.log("✅ VRF Consumer configured");
         
         // Configure Game Contract
         console.log("📝 Configuring Game Contract...");
         const setNFTTx = await gameContract.setNFTContract(await nftContract.getAddress());
         await setNFTTx.wait();
+        console.log("✅ NFT Contract address set in Game Contract");
         
         const setVRFTx = await gameContract.setVRFConsumer(await vrfConsumer.getAddress());
         await setVRFTx.wait();
-        console.log("✅ Game Contract configured");
-        
-        // Authorize Game Contract to call VRF Consumer
-        console.log("📝 Authorizing Game Contract...");
-        const authorizeTx = await vrfConsumer.addAuthorizedCaller(await gameContract.getAddress());
-        await authorizeTx.wait();
-        console.log("✅ Game Contract authorized");
+        console.log("✅ VRF Consumer address set in Game Contract");
         
         // Transfer NFTContract ownership to GameContract
         console.log("📝 Transferring NFTContract ownership...");
         const nftOwnershipTx = await nftContract.transferOwnership(await gameContract.getAddress());
         await nftOwnershipTx.wait();
-        console.log("✅ NFTContract ownership transferred");
+        console.log("✅ NFTContract ownership transferred to GameContract");
         
         const addresses: DeploymentAddresses = {
             vrfConsumer: await vrfConsumer.getAddress(),
@@ -188,7 +175,8 @@ async function main() {
             gameContract: await gameContract.getAddress(),
             network: network.name,
             deployer: deployer.address,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            vrfSubscriptionId: config.subscriptionId?.toString()
         };
         
         // Save deployment information
@@ -198,12 +186,13 @@ async function main() {
         if (network.name !== "hardhat" && network.name !== "localhost") {
             console.log("\n🔍 Starting contract verification...");
             
-            await verifyContract(addresses.vrfConsumer, [
-                config.vrfCoordinator
-            ]);
+            // VRF Consumer has no constructor parameters
+            await verifyContract(addresses.vrfConsumer, []);
             
+            // NFT Contract has no constructor parameters
             await verifyContract(addresses.nftContract, []);
             
+            // Game Contract has no constructor parameters
             await verifyContract(addresses.gameContract, []);
         }
         
@@ -213,17 +202,37 @@ async function main() {
         console.log(`   VRF Consumer: ${addresses.vrfConsumer}`);
         console.log(`   NFT Contract: ${addresses.nftContract}`);
         console.log(`   Game Contract: ${addresses.gameContract}`);
+        if (addresses.vrfSubscriptionId) {
+            console.log(`   VRF Subscription ID: ${addresses.vrfSubscriptionId}`);
+        }
         console.log("=" .repeat(50));
         
         console.log("\n📝 Next Steps:");
-        console.log("1. 🔗 Fund VRF subscription with LINK tokens (if using real Chainlink VRF)");
-        console.log("2. 🛠️  Set up backend service to monitor merge requests");
-        console.log("3. 🔧 Configure backend address using gameContract.setBackendAddress()");
-        console.log("4. 🧪 Test the deployment with some basic operations");
+        if (network.name === "sepolia") {
+            console.log("1. 🔗 Ensure VRF subscription is funded with LINK tokens");
+            console.log(`2. 📋 VRF Subscription ID: ${addresses.vrfSubscriptionId || "Check environment variables"}`);
+            console.log("3. 🔧 Add Game Contract as a VRF consumer in Chainlink subscription");
+        } else {
+            console.log("1. ⚠️  Configure VRF for this network (currently hardcoded for Sepolia)");
+            console.log("2. 🔗 Set up proper VRF subscription for this network");
+        }
+        console.log("4. 🛠️  Set up backend service to monitor merge requests");
+        console.log("5. 🔧 Configure backend address using gameContract.setBackendAddress()");
+        console.log("6. 🧪 Test the deployment with some basic operations");
         
-        if (config.subscriptionId === undefined && network.name !== "hardhat" && network.name !== "localhost") {
-            console.log("\n⚠️  WARNING: No VRF subscription ID configured for this network!");
-            console.log("   Please create a Chainlink VRF subscription and update the configuration.");
+        // Additional VRF setup information
+        console.log("\n🔧 VRF Configuration Details:");
+        console.log(`   Coordinator: ${config.vrfCoordinator}`);
+        console.log(`   Key Hash: ${config.keyHash}`);
+        console.log(`   Callback Gas Limit: ${config.callbackGasLimit}`);
+        console.log(`   Request Confirmations: ${config.requestConfirmations}`);
+        
+        if (!config.subscriptionId && network.name === "sepolia") {
+            console.log("\n⚠️  WARNING: No VRF subscription ID configured!");
+            console.log("   Please create a Chainlink VRF subscription and:");
+            console.log("   1. Set VRF_SUBSCRIPTION_ID in your .env file");
+            console.log("   2. Add the VRF Consumer contract as a consumer in your subscription");
+            console.log("   3. Fund the subscription with LINK tokens");
         }
         
     } catch (error) {
