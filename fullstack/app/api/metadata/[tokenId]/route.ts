@@ -5,7 +5,10 @@ import { createBackendContractService } from "@/lib/contracts";
 import { formatIPFSUrl } from "@/lib/utils";
 
 // GET /api/metadata/[tokenId] - OpenSea compatible metadata endpoint
-export async function GET(request: NextRequest, props: { params: Promise<{ tokenId: string }> }) {
+export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ tokenId: string }> }
+) {
   const params = await props.params;
   console.log("🌐 [METADATA API] OpenSea metadata request received");
 
@@ -96,7 +99,31 @@ export async function GET(request: NextRequest, props: { params: Promise<{ token
           : []),
         {
           trait_type: "Generation",
-          value: entity.isStarter ? "G0" : "F1",
+          value: calculateGenerationCode(
+            entity.isStarter,
+            entity.parent1,
+            entity.parent2
+          ),
+          display_type: "string",
+        },
+        {
+          trait_type: "Generation Level",
+          value: calculateGenerationLevel(
+            entity.isStarter,
+            entity.parent1,
+            entity.parent2
+          ),
+          max_value: 10,
+          display_type: "number",
+        },
+        {
+          trait_type: "Lineage Type",
+          value: getLineageDescription(
+            entity.isStarter,
+            entity.parent1,
+            entity.parent2
+          ),
+          display_type: "string",
         },
         {
           trait_type: "Created Date",
@@ -178,4 +205,39 @@ function getRarityHexColor(rarity: number): string {
     5: "F59E0B", // Gold
   };
   return colors[rarity as keyof typeof colors] || colors[1];
+}
+
+function calculateGenerationCode(
+  isStarter: boolean,
+  parent1: string,
+  parent2: string
+): string {
+  if (isStarter) return "G0";
+  const p1Gen = parent1.startsWith("G") ? parseInt(parent1.slice(1)) : 0;
+  const p2Gen = parent2.startsWith("G") ? parseInt(parent2.slice(1)) : 0;
+  return `F${Math.max(p1Gen, p2Gen) + 1}`;
+}
+
+function calculateGenerationLevel(
+  isStarter: boolean,
+  parent1: string,
+  parent2: string
+): number {
+  if (isStarter) return 0;
+  const p1Gen = parent1.startsWith("G") ? parseInt(parent1.slice(1)) : 0;
+  const p2Gen = parent2.startsWith("G") ? parseInt(parent2.slice(1)) : 0;
+  return Math.max(p1Gen, p2Gen);
+}
+
+function getLineageDescription(
+  isStarter: boolean,
+  parent1: string,
+  parent2: string
+): string {
+  if (isStarter) return "Pure Starter";
+  const types = [];
+  if (parent1.startsWith("G")) types.push("Genetic");
+  if (parent2.startsWith("G")) types.push("Genetic");
+  if (types.length === 0) types.push("Hybrid");
+  return types.join(" / ");
 }

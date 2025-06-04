@@ -9,12 +9,11 @@ export function formatIPFSUrl(ipfsHash: string): string {
 }
 
 export function calculateRarity(randomValue: bigint): number {
-  const roll = (randomValue % 10000n) + 1n;
-
-  if (roll <= BigInt(10)) return 5; //  0.1% chance for 5-star
-  if (roll <= BigInt(1000)) return 4; //  9.9% chance for 4-star
-  if (roll <= BigInt(5000)) return 3; // 40.0% chance for 3-star
-  if (roll <= BigInt(7000)) return 2; // 30.0% chance for 2-star
+  console.log("Random Value:", randomValue.toString());
+  if (randomValue <= BigInt(10)) return 5; //  0.1% chance for 5-star
+  if (randomValue <= BigInt(1000)) return 4; //  9.9% chance for 4-star
+  if (randomValue <= BigInt(5000)) return 3; // 40.0% chance for 3-star
+  if (randomValue <= BigInt(7000)) return 2; // 30.0% chance for 2-star
   return 1; // 20.0% chance for 1-star
 }
 
@@ -38,4 +37,45 @@ export function getRarityHexColor(rarity: number): string {
     5: "F59E0B", // Gold
   };
   return colors[rarity as keyof typeof colors] || colors[1];
+}
+
+export function getStarterEmoji(name: string): string {
+  const emojiMap: { [key: string]: string } = {
+    Fire: "🔥",
+    Water: "💧",
+    Earth: "🌍",
+    Air: "💨",
+    Light: "✨",
+    Shadow: "🌑",
+    Metal: "🔩",
+    Crystal: "💎",
+    Lightning: "⚡",
+    Ice: "🧊",
+    Plant: "🌱",
+    Beast: "🐺",
+    Aquatic: "🌊",
+    Avian: "🦅",
+    Insect: "🐛",
+    Stellar: "⭐",
+    Lunar: "🌙",
+    Solar: "☀️",
+    Void: "🕳️",
+    Nebula: "🌌",
+    Forest: "🌲",
+    Desert: "🏜️",
+    Ocean: "🌊",
+    Mountain: "⛰️",
+    Wolf: "🐺",
+    Tiger: "🐅",
+    Eagle: "🦅",
+    Bear: "🐻",
+    Fox: "🦊",
+    Oak: "🌳",
+    Rose: "🌹",
+    Cactus: "🌵",
+    Lotus: "🪷",
+    Fern: "🌿",
+    Butterfly: "🦋",
+  };
+  return emojiMap[name] || "⭐";
 }

@@ -57,14 +57,7 @@ export async function generateAndUploadHybridImage(
 
     // 1. Upload image first and get the image URI
     const imageFilename = `${hybridName}-${Date.now()}.png`;
-    const imageURI = await uploadImageWithMetadata(imageBuffer, imageFilename, {
-      name: hybridName,
-      rarity: rarity.toString(),
-      parent1: entity1Name,
-      parent2: entity2Name,
-      type: "Hybrid",
-      game: "HybridHaven",
-    });
+    const imageURI = await uploadImageToIPFS(imageBuffer, imageFilename);
 
     console.log("🖼️ [IPFS] Image uploaded:", imageURI);
 
@@ -72,9 +65,9 @@ export async function generateAndUploadHybridImage(
     const metadata = {
       name: hybridName,
       description,
-      image: formatIPFSUrl(imageURI), // Use HTTP URL for the image
+      image: formatIPFSUrl(`ipfs://${imageURI}`), // Use HTTP URL for the image
       external_url: "https://hybridhaven.runs.my.id",
-      background_color: getRarityHexColor(rarity).replace("#", ""), // Remove # for OpenSea
+      // Remove # for OpenSea
       attributes: [
         {
           trait_type: "Rarity",
@@ -100,7 +93,18 @@ export async function generateAndUploadHybridImage(
         },
         {
           trait_type: "Generation",
-          value: "F1",
+          value: calculateGenerationCode(false, entity1Name, entity2Name),
+          display_type: "string",
+        },
+        {
+          trait_type: "Generation Level",
+          value: calculateGenerationLevel(false, entity1Name, entity2Name),
+          max_value: 10,
+          display_type: "number",
+        },
+        {
+          trait_type: "Lineage Type",
+          value: getLineageDescription(false, entity1Name, entity2Name),
           display_type: "string",
         },
         {
@@ -190,59 +194,6 @@ async function generateHybridDescription(
     return `A mystical fusion of ${entity1} and ${entity2}, this ${rarity}-star creature embodies the combined essence of its legendary parents.`;
   }
 }
-
-// async function generateShortHybridDescription(
-//   entity1: string,
-//   entity2: string,
-//   rarity: number
-// ): Promise<string> {
-//   try {
-//     const ai = new GoogleGenAI({
-//       apiKey: process.env.GEMINI_API_KEY || "",
-//     });
-
-//     const config = {
-//       responseMimeType: "text/plain",
-//     };
-
-//     const model = "gemini-2.0-flash";
-
-//     const contents = [
-//       {
-//         role: "user",
-//         parts: [
-//           {
-//             text: `Create a short, engaging description for a hybrid creature that combines "${entity1}" and "${entity2}".
-//             This is a ${rarity}-star rarity creature (1=common, 5=legendary).
-
-//             The description MUST be less than 200 characters and include:
-//             - Unique traits from both parent entities
-//             - A hint of its mystical or elemental nature
-
-//             Keep it concise and suitable for a fantasy NFT game. Don't mention NFT or blockchain and don't use any markdown syntax.`,
-//           },
-//         ],
-//       },
-//     ];
-
-//     const response = await ai.models.generateContentStream({
-//       model,
-//       config,
-//       contents,
-//     });
-
-//     let description = "";
-//     for await (const chunk of response) {
-//       description += chunk.text || "";
-//     }
-
-//     return description.trim();
-//   } catch (error) {
-//     console.error("Error generating short description:", error);
-//     // Fallback description
-//     return `A mystical fusion of ${entity1} and ${entity2}, this ${rarity}-star creature embodies the combined essence of its legendary parents.`;
-//   }
-// }
 
 async function generateHybridName(
   entity1: string,
@@ -492,42 +443,6 @@ export async function uploadImageToIPFS(
   }
 }
 
-export async function uploadImageWithMetadata(
-  imageBuffer: Buffer,
-  filename: string,
-  metadata: any
-): Promise<string> {
-  try {
-    // Upload with minimal key-value pairs to stay under character limits
-    const upload = await pinata.upload.public
-      .file(new File([new Uint8Array(imageBuffer)], filename))
-      .keyvalues({
-        name: (metadata.name || "").slice(0, 245), // Limit to 50 chars
-        rarity: metadata.rarity?.toString() || "1",
-        parent1: (metadata.parent1 || "").slice(0, 30), // Limit to 30 chars
-        parent2: (metadata.parent2 || "").slice(0, 30), // Limit to 30 chars
-        type: "Hybrid",
-        game: "HybridHaven",
-      });
-
-    return `${upload.cid}`;
-  } catch (error) {
-    console.error("Error uploading image with metadata to IPFS:", error);
-
-    // Fallback: upload without metadata if keyvalues fail
-    try {
-      console.log("Fallback: uploading without metadata...");
-      const fallbackUpload = await pinata.upload.public.file(
-        new File([new Uint8Array(imageBuffer)], filename)
-      );
-      return `${fallbackUpload.cid}`;
-    } catch (fallbackError) {
-      console.error("Fallback upload also failed:", fallbackError);
-      throw new Error("Failed to upload image to IPFS");
-    }
-  }
-}
-
 // Upload JSON metadata to IPFS
 export async function uploadMetadataJSON(
   metadata: any,
@@ -553,174 +468,28 @@ export async function uploadMetadataJSON(
   }
 }
 
-// New function to retrieve metadata from key-value store
-export async function fetchMetadataFromKeyValues(
-  ipfsHash: string
-): Promise<any> {
-  try {
-    const files = await pinata.files.public.list().keyvalues({
-      game: "HybridHaven",
-    });
-
-    // Find the file by IPFS hash
-    const targetFile = files.files?.find((file) => file.cid === ipfsHash);
-
-    if (!targetFile || !targetFile.keyvalues) {
-      throw new Error("No metadata found for this file");
-    }
-
-    // Convert key-values back to metadata format
-    const keyvalues = targetFile.keyvalues;
-
-    let imageUri = "";
-    if (keyvalues.type === "Hybrid") {
-      imageUri = formatIPFSUrl(`ipfs://${ipfsHash}`);
-    }
-
-    const metadata = {
-      name: keyvalues.name || "",
-      description: keyvalues.description || "",
-      image: imageUri, // Properly formatted HTTP URL for the image
-      attributes: [
-        { trait_type: "Rarity", value: parseInt(keyvalues.rarity || "1") },
-        { trait_type: "Parent 1", value: keyvalues.parent1 || "" },
-        { trait_type: "Parent 2", value: keyvalues.parent2 || "" },
-        { trait_type: "Type", value: keyvalues.type || "Entity" },
-      ].filter((attr) => attr.value !== ""), // Remove empty attributes
-      external_url: keyvalues.external_url || "",
-      background_color: keyvalues.background_color || "gray",
-      created_at: keyvalues.created_at || "",
-    };
-
-    return metadata;
-  } catch (error) {
-    console.error("Error fetching metadata from key-values:", error);
-    throw new Error("Failed to fetch metadata from IPFS key-values");
-  }
-}
-
-// Update metadata for an existing file
-export async function updateFileMetadata(
-  fileId: string,
-  newMetadata: Partial<any>
-): Promise<void> {
-  try {
-    // Prepare key-values for update
-    const keyvalues: Record<string, string> = {};
-
-    if (newMetadata.name !== undefined) keyvalues.name = newMetadata.name;
-    if (newMetadata.description !== undefined)
-      keyvalues.description = newMetadata.description;
-    if (newMetadata.rarity !== undefined)
-      keyvalues.rarity = newMetadata.rarity.toString();
-    if (newMetadata.parent1 !== undefined)
-      keyvalues.parent1 = newMetadata.parent1;
-    if (newMetadata.parent2 !== undefined)
-      keyvalues.parent2 = newMetadata.parent2;
-    if (newMetadata.type !== undefined) keyvalues.type = newMetadata.type;
-    if (newMetadata.background_color !== undefined)
-      keyvalues.background_color = newMetadata.background_color;
-    if (newMetadata.external_url !== undefined)
-      keyvalues.external_url = newMetadata.external_url;
-
-    await pinata.files.public.update({
-      id: fileId,
-      keyvalues: keyvalues,
-    });
-  } catch (error) {
-    console.error("Error updating file metadata:", error);
-    throw new Error("Failed to update file metadata");
-  }
-}
-
-// Function to search entities by metadata
-export async function searchEntitiesByMetadata(filters: {
-  rarity?: number;
-  parent1?: string;
-  parent2?: string;
-  type?: string;
-}): Promise<any[]> {
-  try {
-    // Build key-value filters
-    let query = pinata.files.public.list().keyvalues({ game: "HybridHaven" });
-
-    if (filters.rarity) {
-      query = query.keyvalues({ rarity: filters.rarity.toString() });
-    }
-    if (filters.parent1) {
-      query = query.keyvalues({ parent1: filters.parent1 });
-    }
-    if (filters.parent2) {
-      query = query.keyvalues({ parent2: filters.parent2 });
-    }
-    if (filters.type) {
-      query = query.keyvalues({ type: filters.type });
-    }
-
-    const result = await query;
-    const files = result.files || [];
-
-    // Convert files to metadata format
-    return files.map((file) => {
-      const kv = file.keyvalues || {};
-      return {
-        ipfsHash: file.cid,
-        imageURI: `ipfs://${file.cid}`,
-        name: kv.name || "",
-        description: kv.description || "",
-        rarity: parseInt(kv.rarity || "1"),
-        parent1: kv.parent1 || "",
-        parent2: kv.parent2 || "",
-        type: kv.type || "Entity",
-        background_color: kv.background_color || "gray",
-        external_url: kv.external_url || "",
-        created_at: kv.created_at || "",
-        attributes: [
-          { trait_type: "Rarity", value: parseInt(kv.rarity || "1") },
-          { trait_type: "Parent 1", value: kv.parent1 || "" },
-          { trait_type: "Parent 2", value: kv.parent2 || "" },
-          { trait_type: "Type", value: kv.type || "Entity" },
-        ].filter((attr) => attr.value !== ""),
-      };
-    });
-  } catch (error) {
-    console.error("Error searching entities by metadata:", error);
-    throw new Error("Failed to search entities");
-  }
-}
-
-// Legacy function for backwards compatibility - now fetches from key-values
+// Fetch metadata from IPFS JSON file
 export async function fetchMetadataFromIPFS(metadataURI: string): Promise<any> {
   try {
     // Extract IPFS hash from URI
     const ipfsHash = metadataURI.replace("ipfs://", "");
 
-    // Try to fetch from key-values first (new method)
-    try {
-      return await fetchMetadataFromKeyValues(ipfsHash);
-    } catch (keyValueError) {
-      console.warn(
-        "Failed to fetch from key-values, falling back to HTTP fetch:",
-        keyValueError
+    // Fetch JSON metadata from IPFS
+    const httpUrl = formatIPFSUrl(`ipfs://${ipfsHash}`);
+    const response = await fetch(httpUrl, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch metadata: ${response.status} ${response.statusText}`
       );
-
-      // Fallback to traditional HTTP fetch for old metadata files
-      const httpUrl = formatIPFSUrl(metadataURI);
-      const response = await fetch(httpUrl, {
-        method: "GET",
-        headers: {
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch metadata: ${response.status} ${response.statusText}`
-        );
-      }
-
-      return await response.json();
     }
+
+    return await response.json();
   } catch (error) {
     console.error("Error fetching metadata from IPFS:", error);
     throw new Error("Failed to fetch metadata from IPFS");
@@ -775,4 +544,39 @@ function sanitizeFilename(name: string): string {
 
   // Truncate to max 50 characters
   return withUnderscores.substring(0, 50);
+}
+
+function calculateGenerationCode(
+  isStarter: boolean,
+  parent1: string,
+  parent2: string
+): string {
+  if (isStarter) return "G0";
+  const p1Gen = parent1.startsWith("G") ? parseInt(parent1.slice(1)) : 0;
+  const p2Gen = parent2.startsWith("G") ? parseInt(parent2.slice(1)) : 0;
+  return `F${Math.max(p1Gen, p2Gen) + 1}`;
+}
+
+function calculateGenerationLevel(
+  isStarter: boolean,
+  parent1: string,
+  parent2: string
+): number {
+  if (isStarter) return 0;
+  const p1Gen = parent1.startsWith("G") ? parseInt(parent1.slice(1)) : 0;
+  const p2Gen = parent2.startsWith("G") ? parseInt(parent2.slice(1)) : 0;
+  return Math.max(p1Gen, p2Gen);
+}
+
+function getLineageDescription(
+  isStarter: boolean,
+  parent1: string,
+  parent2: string
+): string {
+  if (isStarter) return "Pure Starter";
+  const types = [];
+  if (parent1.startsWith("G")) types.push("Genetic");
+  if (parent2.startsWith("G")) types.push("Genetic");
+  if (types.length === 0) types.push("Hybrid");
+  return types.join(" / ");
 }
