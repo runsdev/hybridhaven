@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+
 import { GoogleGenAI } from "@google/genai";
-import { Readable } from "stream";
 import { pinata } from "@/utils/config";
 
 // Validate environment variables

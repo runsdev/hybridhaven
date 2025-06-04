@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
+
 import { ethers } from "ethers";
 import { ContractAddresses } from "@/types/game";
 import { fetchMetadataFromIPFS, formatIPFSUrl } from "./ipfs";
@@ -129,29 +131,6 @@ async function fetchEntityMetadata(metadataURI: string) {
       attributes: [],
     };
   }
-}
-
-// Helper function to serialize bigint and other non-JSON types
-function serializeContractResponse(obj: any): any {
-  if (obj === null || obj === undefined) return obj;
-
-  if (typeof obj === "bigint") {
-    return obj.toString();
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map(serializeContractResponse);
-  }
-
-  if (typeof obj === "object") {
-    const serialized: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      serialized[key] = serializeContractResponse(value);
-    }
-    return serialized;
-  }
-
-  return obj;
 }
 
 // Contract addresses with validation

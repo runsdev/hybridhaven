@@ -1,22 +1,21 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client";
 
 import { useGame } from "@/hooks/useGame";
 import { Entity } from "@/types/game";
 import { useState, useEffect } from "react";
 import { formatIPFSUrl } from "@/lib/utils";
-import HatchTimerComponent from "@/components/HatchTimer";
 
 export default function HybridHaven() {
   const {
     gameState,
     mergeInProgress,
-    finalizeInProgress,
     autoFinalizingRequests,
     hatchTimers,
     connectWallet,
     claimStarterEntity,
     requestMerge,
-    finalizeMerge,
     refreshData,
     clearError,
     addNFTToWallet,
@@ -136,21 +135,6 @@ export default function HybridHaven() {
       console.error("Claim failed:", error);
       // Error is handled by the hook
     }
-  };
-
-  const getRarityStars = (rarity: number) => {
-    return "⭐".repeat(rarity);
-  };
-
-  const getRarityColor = (rarity: number) => {
-    const colors = {
-      1: "text-gray-400",
-      2: "text-green-400",
-      3: "text-blue-400",
-      4: "text-purple-400",
-      5: "text-yellow-400",
-    };
-    return colors[rarity as keyof typeof colors] || "text-gray-400";
   };
 
   const hasStarterEntity = hasStarterCheck.hasStarter;
@@ -583,8 +567,6 @@ export default function HybridHaven() {
 function EntityCard({
   entity,
   selected,
-  onSelect,
-  canSelect,
   onClick,
 }: {
   entity: Entity;

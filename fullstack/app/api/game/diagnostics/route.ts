@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextRequest, NextResponse } from "next/server";
 import { createBackendContractService } from "@/lib/contracts";
 
@@ -39,7 +41,9 @@ export async function GET(request: NextRequest) {
 
     try {
       // Check player merge eligibility
-      diagnostics.player.canMerge = await backendService.canPlayerMerge(address);
+      diagnostics.player.canMerge = await backendService.canPlayerMerge(
+        address
+      );
     } catch (error: any) {
       diagnostics.errors.push(`canPlayerMerge failed: ${error.message}`);
     }
@@ -55,7 +59,8 @@ export async function GET(request: NextRequest) {
 
     try {
       // Get pending requests
-      diagnostics.player.pendingRequests = await backendService.getPendingRequests(address);
+      diagnostics.player.pendingRequests =
+        await backendService.getPendingRequests(address);
     } catch (error: any) {
       diagnostics.errors.push(`getPendingRequests failed: ${error.message}`);
     }
@@ -66,7 +71,9 @@ export async function GET(request: NextRequest) {
       // We'll add more specific checks here
       diagnostics.contracts.configured = true;
     } catch (error: any) {
-      diagnostics.errors.push(`Contract configuration check failed: ${error.message}`);
+      diagnostics.errors.push(
+        `Contract configuration check failed: ${error.message}`
+      );
     }
 
     return NextResponse.json({

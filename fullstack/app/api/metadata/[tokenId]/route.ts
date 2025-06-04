@@ -1,12 +1,12 @@
+/* eslint-disable */
+
 import { NextRequest, NextResponse } from "next/server";
 import { createBackendContractService } from "@/lib/contracts";
 import { formatIPFSUrl } from "@/lib/utils";
 
 // GET /api/metadata/[tokenId] - OpenSea compatible metadata endpoint
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { tokenId: string } }
-) {
+export async function GET(request: NextRequest, props: { params: Promise<{ tokenId: string }> }) {
+  const params = await props.params;
   console.log("🌐 [METADATA API] OpenSea metadata request received");
 
   try {
