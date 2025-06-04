@@ -174,6 +174,17 @@ contract NFTContract is ERC721, ERC721URIStorage, Ownable {
         return _exists(tokenId);
     }
 
+    // Burn NFT (can be called by token owner)
+    function burn(uint256 tokenId) external {
+        require(_exists(tokenId), "Token does not exist");
+        require(
+            ownerOf(tokenId) == msg.sender,
+            "Only token owner or contract owner can burn"
+        );
+        
+        _burn(tokenId);
+    }
+
     // Override supportsInterface for OpenSea compatibility
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
         // ERC-4906 interface ID
