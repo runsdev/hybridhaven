@@ -594,7 +594,6 @@ export async function fetchMetadataFromKeyValues(
 
     return metadata;
   } catch (error) {
-    console.error("Error fetching metadata from key-values:", error);
     throw new Error("Failed to fetch metadata from IPFS key-values");
   }
 }
@@ -699,11 +698,6 @@ export async function fetchMetadataFromIPFS(metadataURI: string): Promise<any> {
     try {
       return await fetchMetadataFromKeyValues(ipfsHash);
     } catch (keyValueError) {
-      console.warn(
-        "Failed to fetch from key-values, falling back to HTTP fetch:",
-        keyValueError
-      );
-
       // Fallback to traditional HTTP fetch for old metadata files
       const httpUrl = formatIPFSUrl(metadataURI);
       const response = await fetch(httpUrl, {

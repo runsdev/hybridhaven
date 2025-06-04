@@ -39,3 +39,44 @@ export function getRarityHexColor(rarity: number): string {
   };
   return colors[rarity as keyof typeof colors] || colors[1];
 }
+
+export function getStarterEmoji(name: string): string {
+  const emojiMap: { [key: string]: string } = {
+    Fire: "🔥",
+    Water: "💧",
+    Earth: "🌍",
+    Air: "💨",
+    Light: "✨",
+    Shadow: "🌑",
+    Metal: "🔩",
+    Crystal: "💎",
+    Lightning: "⚡",
+    Ice: "🧊",
+    Plant: "🌱",
+    Beast: "🐺",
+    Aquatic: "🌊",
+    Avian: "🦅",
+    Insect: "🐛",
+    Stellar: "⭐",
+    Lunar: "🌙",
+    Solar: "☀️",
+    Void: "🕳️",
+    Nebula: "🌌",
+    Forest: "🌲",
+    Desert: "🏜️",
+    Ocean: "🌊",
+    Mountain: "⛰️",
+    Wolf: "🐺",
+    Tiger: "🐅",
+    Eagle: "🦅",
+    Bear: "🐻",
+    Fox: "🦊",
+    Oak: "🌳",
+    Rose: "🌹",
+    Cactus: "🌵",
+    Lotus: "🪷",
+    Fern: "🌿",
+    Butterfly: "🦋",
+  };
+  return emojiMap[name] || "⭐";
+}
