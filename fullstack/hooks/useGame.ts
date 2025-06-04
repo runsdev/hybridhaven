@@ -7,9 +7,9 @@ const globalAutoFinalizingRequests = new Set<bigint>();
 const globalCompletedRequests = new Set<bigint>();
 
 // VRF timing constants
-const VRF_EXPECTED_TIME = 120; // 2 minutes in seconds
+const VRF_EXPECTED_TIME = 700; // 2 minutes in seconds
 const VRF_POLL_INTERVAL = 10; // Poll every 10 seconds
-const VRF_MAX_WAIT_TIME = 300; // 5 minutes max wait
+const VRF_MAX_WAIT_TIME = 120; // 5 minutes max wait
 
 export function useGame() {
   const [gameState, setGameState] = useState<GameState>({

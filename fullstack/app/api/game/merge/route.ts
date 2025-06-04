@@ -240,7 +240,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // Calculate rarity from randomness (this is done in the smart contract, but we need it for AI generation)
-    const rarity = calculateRarity(BigInt(randomness));
+    // const rarity = calculateRarity(BigInt(randomness));
+    let rands = await backendService.getDirectRandomness(requestId);
+    const rarity = calculateRarity(rands);
 
     // Generate AI image and upload to IPFS
     const { metadataURI, imageURI, metadata } =
@@ -319,17 +321,19 @@ export async function PATCH(request: NextRequest) {
     let mergeRequest;
     try {
       mergeRequest = await backendService.getMergeRequest(requestIdBigInt);
-      console.log(`📋 [API] Merge request ${requestId} details:`, {
-        player: mergeRequest.player,
-        requestingAddress: address,
-        entity1Name: mergeRequest.entity1Name,
-        entity2Name: mergeRequest.entity2Name,
-        entity1IsStarter: mergeRequest.entity1IsStarter,
-        entity2IsStarter: mergeRequest.entity2IsStarter,
-        entity1TokenId: mergeRequest.entity1TokenId,
-        entity2TokenId: mergeRequest.entity2TokenId,
-        fulfilled: mergeRequest.fulfilled,
-      });
+
+      if (
+        mergeRequest.player === "0x0000000000000000000000000000000000000000"
+      ) {
+        console.log("❌ [API] Merge request not found or invalid, skipping");
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Merge request not found or invalid",
+          },
+          { status: 404 }
+        );
+      }
     } catch (error) {
       console.error("Error fetching merge request:", error);
       return NextResponse.json(
@@ -339,6 +343,25 @@ export async function PATCH(request: NextRequest) {
             "Failed to fetch merge request from blockchain. Please try again.",
         },
         { status: 500 }
+      );
+    }
+
+    // Validate merge request data before processing
+    if (
+      mergeRequest.player === "0x0000000000000000000000000000000000000000" ||
+      !mergeRequest.entity1Name ||
+      !mergeRequest.entity2Name ||
+      mergeRequest.entity1Name.trim() === "" ||
+      mergeRequest.entity2Name.trim() === ""
+    ) {
+      console.log("⚠️ [API] Invalid merge request detected - skipping");
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid merge request: corrupted or incomplete data. This request will be skipped.",
+        },
+        { status: 400 }
       );
     }
 
@@ -413,7 +436,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Calculate rarity from randomness
-    const rarity = calculateRarity(BigInt(randomness));
+    // const rarity = calculateRarity(BigInt(randomness));
+    const rands = await backendService.getDirectRandomness(requestIdBigInt);
+    const rarity = calculateRarity(rands);
     console.log("⭐ [API] Calculated rarity:", { rarity, randomness });
 
     // Generate AI image and upload to IPFS

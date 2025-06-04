@@ -254,14 +254,14 @@ export default function HybridHaven() {
         {/* Cyberpunk background effects */}
         <div className="absolute inset-0 opacity-30">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-magenta-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-fuchsia-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
           <div className="absolute top-3/4 left-1/2 w-64 h-64 bg-green-500/20 rounded-full blur-3xl animate-pulse delay-500"></div>
         </div>
 
         <div className="text-center space-y-8 max-w-4xl mx-auto px-4 relative z-10">
           <div className="space-y-4">
-            <h1 className="text-6xl font-bold bg-gradient-to-r from-cyan-400 via-magenta-400 to-green-400 bg-clip-text text-transparent mb-4 animate-pulse">
-              🎮 HybridHaven
+            <h1 className="text-6xl font-bold bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-green-400 bg-clip-text text-transparent mb-4 animate-pulse">
+              HybridHaven
             </h1>
             <div className="text-cyan-300 text-sm uppercase tracking-widest font-mono mb-2">
               [NEURAL_NEXUS_ACTIVE]
@@ -287,8 +287,8 @@ export default function HybridHaven() {
                   </strong>{" "}
                   35 unique entities
                 </div>
-                <div className="text-cyan-200 bg-magenta-900/20 border border-magenta-500/20 rounded-xl p-3 hover:border-magenta-400/40 transition-all duration-300">
-                  <span className="text-magenta-400">⚡</span>{" "}
+                <div className="text-cyan-200 bg-fuchsia-900/20 border border-fuchsia-500/20 rounded-xl p-3 hover:border-fuchsia-400/40 transition-all duration-300">
+                  <span className="text-fuchsia-400">⚡</span>{" "}
                   <strong className="text-white">Entity Merging:</strong>{" "}
                   Combine any two entities
                 </div>
@@ -322,7 +322,7 @@ export default function HybridHaven() {
             <button
               onClick={connectWallet}
               disabled={gameState.loading}
-              className="bg-gradient-to-r from-cyan-600 via-magenta-600 to-green-600 hover:from-cyan-500 hover:via-magenta-500 hover:to-green-500 disabled:opacity-50 text-black font-bold py-4 px-8 rounded-2xl text-lg transition-all duration-300 transform hover:scale-105 shadow-2xl shadow-cyan-500/25 border border-cyan-400/30 hover:border-cyan-300/50 hover:shadow-cyan-400/40"
+              className="bg-gradient-to-r from-cyan-600 via-fuchsia-600 to-green-600 hover:from-cyan-500 hover:via-fuchsia-500 hover:to-green-500 disabled:opacity-50 text-black font-bold py-4 px-8 rounded-2xl text-lg transition-all duration-300 transform hover:scale-105 shadow-2xl shadow-cyan-500/25 border border-cyan-400/30 hover:border-cyan-300/50 hover:shadow-cyan-400/40"
             >
               {gameState.loading ? (
                 <span className="flex items-center">
@@ -363,15 +363,15 @@ export default function HybridHaven() {
       {/* Cyberpunk background effects */}
       <div className="absolute inset-0 opacity-20">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-cyan-500/30 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-magenta-500/30 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-fuchsia-500/30 rounded-full blur-3xl animate-pulse delay-1000"></div>
         <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-green-500/30 rounded-full blur-3xl animate-pulse delay-500"></div>
       </div>
 
       {/* Header */}
       <header className="border-b border-cyan-500/30 bg-black/40 backdrop-blur-lg sticky top-0 z-50 shadow-lg shadow-cyan-500/10">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-magenta-400 bg-clip-text text-transparent">
-            🎮 HybridHaven
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-indigo-700 bg-clip-text text-transparent animate-pulse">
+            HybridHaven
           </h1>
           <div className="flex items-center space-x-6">
             <button
@@ -389,7 +389,7 @@ export default function HybridHaven() {
             <div className="text-cyan-200 text-sm font-mono bg-cyan-900/20 border border-cyan-500/30 rounded-xl px-3 py-1">
               {gameState.address?.slice(0, 6)}...{gameState.address?.slice(-4)}
             </div>
-            <div className="text-magenta-200 text-sm font-medium bg-magenta-900/20 border border-magenta-500/30 rounded-xl px-3 py-1">
+            <div className="text-fuchsia-200 text-sm font-medium bg-fuchsia-900/20 border border-fuchsia-500/30 rounded-xl px-3 py-1">
               {gameState.entities.length} ENTITIES
             </div>
           </div>
@@ -433,7 +433,7 @@ export default function HybridHaven() {
             <h2 className="text-2xl font-bold text-cyan-300 flex items-center">
               <span className="mr-2">📦</span>
               NEURAL_COLLECTION
-              <span className="ml-2 text-xs text-magenta-400 bg-magenta-900/30 px-2 py-1 rounded-full">
+              <span className="ml-2 text-xs text-fuchsia-400 bg-fuchsia-900/30 px-2 py-1 rounded-full">
                 ACTIVE
               </span>
             </h2>
@@ -561,7 +561,7 @@ export default function HybridHaven() {
                       </span>
                     )}
                     {sortBy !== "newest" && (
-                      <span className="bg-magenta-900/30 border border-magenta-500/30 text-magenta-200 px-3 py-1 rounded-full text-xs">
+                      <span className="bg-fuchsia-900/30 border border-fuchsia-500/30 text-fuchsia-200 px-3 py-1 rounded-full text-xs">
                         Sort:{" "}
                         {sortBy === "oldest"
                           ? "Oldest"
@@ -613,7 +613,7 @@ export default function HybridHaven() {
               <p className="text-cyan-200 text-lg font-mono">
                 [NO_ENTITIES_DETECTED]
                 <br />
-                <span className="text-sm text-magenta-300">
+                <span className="text-sm text-fuchsia-300">
                   {!hasStarterEntity
                     ? "EXECUTE: Claim your starter collection above!"
                     : "EXECUTE: Start merging to create new entities!"}
@@ -694,7 +694,7 @@ export default function HybridHaven() {
               {/* Hybrid Entities - Large Cards */}
               {filteredHybrids.length > 0 && (
                 <div>
-                  <h3 className="text-xl font-bold text-magenta-300 mb-4 flex items-center">
+                  <h3 className="text-xl font-bold text-fuchsia-300 mb-4 flex items-center">
                     <span className="mr-2">🔮</span>
                     HYBRID_CREATURES
                     <span className="ml-2 text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
@@ -774,9 +774,9 @@ export default function HybridHaven() {
       {/* Sticky Fusion Laboratory - Bottom Right */}
       {gameState.entities.length >= 2 && (
         <div className="fixed bottom-6 right-6 z-50">
-          <div className="bg-black/90 backdrop-blur-lg border border-magenta-500/50 rounded-2xl p-4 shadow-2xl shadow-magenta-500/20 max-w-xs">
+          <div className="bg-black/90 backdrop-blur-lg border border-fuchsia-500/50 rounded-2xl p-4 shadow-2xl shadow-fuchsia-500/20 max-w-xs">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-bold text-magenta-300 flex items-center">
+              <h3 className="text-lg font-bold text-fuchsia-300 flex items-center">
                 <span className="mr-1">⚡</span>
                 FUSION
               </h3>
@@ -786,7 +786,7 @@ export default function HybridHaven() {
             </div>
 
             {selectedEntities.length > 0 && (
-              <div className="mb-3 text-xs text-magenta-200 font-mono bg-magenta-900/20 border border-magenta-500/30 rounded-lg px-2 py-1">
+              <div className="mb-3 text-xs text-fuchsia-200 font-mono bg-fuchsia-900/20 border border-fuchsia-500/30 rounded-lg px-2 py-1">
                 #{selectedEntities.join(", #")}
               </div>
             )}
@@ -819,7 +819,7 @@ export default function HybridHaven() {
                   <button
                     onClick={handleMerge}
                     disabled={gameState.loading || mergeInProgress}
-                    className="flex-1 bg-gradient-to-r from-magenta-600 to-pink-600 hover:from-magenta-500 hover:to-pink-500 disabled:opacity-50 text-white font-bold text-xs py-2 px-3 rounded-xl transition-all duration-300"
+                    className="flex-1 bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 disabled:opacity-50 text-white font-bold text-xs py-2 px-3 rounded-xl transition-all duration-300"
                   >
                     {mergeInProgress ? (
                       <span className="flex items-center justify-center">

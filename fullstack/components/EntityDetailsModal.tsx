@@ -163,7 +163,7 @@ export default function EntityDetailsModal({
           {/* Header */}
           <div className="flex justify-between items-start">
             <div className="space-y-2">
-              <h2 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-magenta-400 to-green-400 bg-clip-text text-transparent flex items-center space-x-3">
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-green-400 bg-clip-text text-transparent flex items-center space-x-3">
                 <span>{entity.name}</span>
                 <span className="text-2xl">
                   {getRarityStars(entity.rarity)}
@@ -279,11 +279,11 @@ export default function EntityDetailsModal({
 
           {/* Entity Details */}
           <div className="space-y-6">
-            <h4 className="text-xl font-bold text-magenta-300 flex items-center">
+            <h4 className="text-xl font-bold text-fuchsia-300 flex items-center">
               <span className="mr-2">🔍</span>
               ENTITY_DETAILS
             </h4>
-            <div className="bg-black/40 border border-magenta-500/30 rounded-2xl p-6 backdrop-blur-sm">
+            <div className="bg-black/40 border border-fuchsia-500/30 rounded-2xl p-6 backdrop-blur-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="bg-gradient-to-r from-gray-800/50 to-black/30 rounded-xl p-4 border border-gray-600/30">
@@ -311,7 +311,7 @@ export default function EntityDetailsModal({
                         <span className="text-gray-400 text-sm font-mono uppercase tracking-wide">
                           PARENT_1:
                         </span>
-                        <div className="text-magenta-300 font-bold text-lg mt-1">
+                        <div className="text-fuchsia-300 font-bold text-lg mt-1">
                           {entity.parent1}
                         </div>
                       </div>
@@ -319,7 +319,7 @@ export default function EntityDetailsModal({
                         <span className="text-gray-400 text-sm font-mono uppercase tracking-wide">
                           PARENT_2:
                         </span>
-                        <div className="text-magenta-300 font-bold text-lg mt-1">
+                        <div className="text-fuchsia-300 font-bold text-lg mt-1">
                           {entity.parent2}
                         </div>
                       </div>

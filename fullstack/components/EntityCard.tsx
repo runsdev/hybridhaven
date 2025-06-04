@@ -125,8 +125,8 @@ export default function EntityCard({
         </div>
 
         {!entity.isStarter && entity.parent1 && entity.parent2 && (
-          <div className="text-xs text-magenta-300 bg-magenta-900/30 border border-magenta-500/30 rounded-xl px-3 py-2 font-mono">
-            <span className="text-magenta-400">◆</span> {entity.parent1} +{" "}
+          <div className="text-xs text-fuchsia-300 bg-fuchsia-900/30 border border-fuchsia-500/30 rounded-xl px-3 py-2 font-mono">
+            <span className="text-fuchsia-400">◆</span> {entity.parent1} +{" "}
             {entity.parent2}
           </div>
         )}
@@ -141,7 +141,7 @@ export default function EntityCard({
 
       {/* Selection Indicator with cyberpunk styling */}
       {selected && (
-        <div className="absolute top-3 right-3 bg-gradient-to-r from-cyan-500 to-magenta-500 text-black rounded-full w-8 h-8 flex items-center justify-center text-lg font-bold shadow-lg shadow-cyan-500/50 animate-pulse border-2 border-cyan-300">
+        <div className="absolute top-3 right-3 bg-gradient-to-r from-cyan-500 to-fuchsia-500 text-black rounded-full w-8 h-8 flex items-center justify-center text-lg font-bold shadow-lg shadow-cyan-500/50 animate-pulse border-2 border-cyan-300">
           ✓
         </div>
       )}

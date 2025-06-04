@@ -509,6 +509,53 @@ export class BackendContractService {
     }
   }
 
+  async getDirectRandomness(requestId: bigint): Promise<bigint> {
+    try {
+      const requestIdBigInt = BigInt(requestId);
+      console.log("🎲 [CONTRACT] Checking VRF status for request:", {
+        originalRequestId: requestId.toString(),
+        convertedRequestId: requestIdBigInt.toString(),
+      });
+
+      // Use getRequestStatus instead of getRandomnessResult
+      const result = await this.vrfContract.getRequestStatus(requestIdBigInt);
+      console.log("🎲 [CONTRACT] VRF status result:", {
+        fulfilled: result.fulfilled,
+        randomWordsLength: result.randomWords?.length || 0,
+        randomWords:
+          result.randomWords?.map((w: { toString: () => any }) =>
+            w.toString()
+          ) || [],
+      });
+
+      // Check if the request is fulfilled and has randomness
+      if (
+        !result.fulfilled ||
+        !result.randomWords ||
+        result.randomWords.length === 0
+      ) {
+        console.log("⏳ [CONTRACT] VRF not fulfilled yet");
+        return 0n; // Return 0 to indicate VRF not yet fulfilled
+      }
+
+      // Return the first random word as the randomness value
+      const randomness = await this.gameContract.getRequestRandomness(
+        requestId
+      );
+      console.log("✅ [CONTRACT] VRF randomness obtained:", { randomness });
+      return randomness;
+    } catch (error: any) {
+      // console.error("❌ [CONTRACT] Error getting VRF randomness:", error);
+      // console.log("🔍 [CONTRACT] VRF error details:", {
+      //   message: error.message,
+      //   reason: error.reason,
+      //   code: error.code,
+      //   data: error.data,
+      // });
+      return 0n; // Return 0 to indicate VRF not ready
+    }
+  }
+
   // Get randomness result for VRF requests
   async getRandomnessResult(requestId: bigint): Promise<number> {
     try {
@@ -545,13 +592,13 @@ export class BackendContractService {
       console.log("✅ [CONTRACT] VRF randomness obtained:", { randomness });
       return randomness;
     } catch (error: any) {
-      console.error("❌ [CONTRACT] Error getting VRF randomness:", error);
-      console.log("🔍 [CONTRACT] VRF error details:", {
-        message: error.message,
-        reason: error.reason,
-        code: error.code,
-        data: error.data,
-      });
+      // console.error("❌ [CONTRACT] Error getting VRF randomness:", error);
+      // console.log("🔍 [CONTRACT] VRF error details:", {
+      //   message: error.message,
+      //   reason: error.reason,
+      //   code: error.code,
+      //   data: error.data,
+      // });
 
       // Check if this is a "request not found" error
       if (
