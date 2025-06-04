@@ -282,15 +282,13 @@ export default function HybridHaven() {
               <div className="space-y-3">
                 <div className="text-cyan-200 bg-cyan-900/20 border border-cyan-500/20 rounded-xl p-3 hover:border-cyan-400/40 transition-all duration-300">
                   <span className="text-green-400">🎁</span>{" "}
-                  <strong className="text-white">
-                    Free Starter Collection:
-                  </strong>{" "}
-                  35 unique entities
+                  <strong className="text-white">Huge Possibilities:</strong> 35
+                  starter entities
                 </div>
                 <div className="text-cyan-200 bg-fuchsia-900/20 border border-fuchsia-500/20 rounded-xl p-3 hover:border-fuchsia-400/40 transition-all duration-300">
                   <span className="text-fuchsia-400">⚡</span>{" "}
                   <strong className="text-white">Entity Merging:</strong>{" "}
-                  Combine any two entities
+                  Combine ANY two entities
                 </div>
                 <div className="text-cyan-200 bg-green-900/20 border border-green-500/20 rounded-xl p-3 hover:border-green-400/40 transition-all duration-300">
                   <span className="text-yellow-400">🎲</span>{" "}

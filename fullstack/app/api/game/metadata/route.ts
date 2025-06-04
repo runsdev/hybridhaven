@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchMetadataFromKeyValues, fetchMetadataFromIPFS } from "@/lib/ipfs";
+import { fetchMetadataFromIPFS } from "@/lib/ipfs";
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,38 +29,22 @@ export async function GET(request: NextRequest) {
     // Handle metadata fetching using CID (prioritize this approach)
     if (cid) {
       try {
-        // First try to fetch as a JSON metadata file
+        // Fetch JSON metadata file directly
         const metadata = await fetchMetadataFromIPFS(`ipfs://${cid}`);
 
         return NextResponse.json({
           success: true,
           metadata,
         });
-      } catch (jsonError) {
-        console.warn(
-          "Failed to fetch as JSON metadata, trying key-value approach:",
-          jsonError
+      } catch (error) {
+        console.error("Error fetching JSON metadata:", error);
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to fetch JSON metadata",
+          },
+          { status: 500 }
         );
-
-        try {
-          // Fallback to key-value metadata (for image files with metadata in key-values)
-          const metadata = await fetchMetadataFromKeyValues(cid);
-
-          return NextResponse.json({
-            success: true,
-            metadata,
-          });
-        } catch (kvError) {
-          console.error("Error fetching metadata with both methods:", kvError);
-          return NextResponse.json(
-            {
-              success: false,
-              error:
-                "Failed to fetch metadata using either JSON or key-value methods",
-            },
-            { status: 500 }
-          );
-        }
       }
     }
 
