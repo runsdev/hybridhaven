@@ -20,7 +20,7 @@ contract NFTContract is ERC721, ERC721URIStorage, Ownable {
         uint256 tokenId;
         string name;
         uint8 rarity;
-        string imageURI;
+        string metadataURI;
         string parent1;
         string parent2;
         uint256 createdAt;
@@ -38,6 +38,10 @@ contract NFTContract is ERC721, ERC721URIStorage, Ownable {
 
     constructor() ERC721("HybridHaven", "HYBRID") {
         _baseTokenURI = "https://cyan-nearby-hippopotamus-418.mypinata.cloud/ipfs/";
+    }
+
+    function contractURI() public pure returns (string memory) {
+        return "https://cyan-nearby-hippopotamus-418.mypinata.cloud/ipfs/bafkreigukneaeoz4k7cu523gliovspmeityqweel7lr2gn35jw5uhdvsxi";
     }
 
     // Set base URI for metadata (OpenSea standard)
@@ -95,7 +99,7 @@ contract NFTContract is ERC721, ERC721URIStorage, Ownable {
             tokenId: newTokenId,
             name: name,
             rarity: rarity,
-            imageURI: metadataURI, // For hybrids, this contains the full metadata URI
+            metadataURI: metadataURI,
             parent1: parent1,
             parent2: parent2,
             createdAt: block.timestamp,
@@ -114,7 +118,7 @@ contract NFTContract is ERC721, ERC721URIStorage, Ownable {
         
         if (bytes(metadataURI).length > 0) {
             _setTokenURI(tokenId, metadataURI);
-            entities[tokenId].imageURI = metadataURI;
+            entities[tokenId].metadataURI = metadataURI;
         }
         
         emit MetadataUpdate(tokenId);

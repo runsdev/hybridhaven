@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "lib": ["dom", "dom.iterable", "es6"],
+    "lib": ["dom", "dom.iterable", "es6", "es2020", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -21,7 +21,7 @@
     "paths": {
       "@/*": ["./*"]
     },
-    "target": "es2017",
+    "target": "es2020",
     "forceConsistentCasingInFileNames": true
   },
   "include": [

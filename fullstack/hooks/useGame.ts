@@ -176,12 +176,13 @@ export function useGame() {
               options: {
                 address: nftContractAddress,
                 tokenId: tokenId.toString(),
-                image: entity.imageURI
-                  ? entity.imageURI.replace(
-                      "ipfs://",
-                      "https://gateway.pinata.cloud/ipfs/"
-                    )
-                  : undefined,
+                image: entity.imageURI,
+                // ? entity.imageURI.replace(
+                //     "ipfs://",
+                //     process.env.NEXT_PUBLIC_IPFS_GATEWAY ||
+                //       "https://gateway.pinata.cloud/ipfs/"
+                //   )
+                // : undefined,
                 name: entity.name,
               },
             },
@@ -425,18 +426,40 @@ export function useGame() {
   // Updated request merge to handle virtual starter entities
   const requestMerge = useCallback(
     async (entity1: Entity, entity2: Entity) => {
-      if (!gameState.address || mergeInProgress) return;
+      console.log("🚀 [MERGE FLOW] Starting merge request");
+      console.log("🔍 [MERGE FLOW] Input entities:", {
+        entity1: {
+          name: entity1.name,
+          isStarter: entity1.isStarter,
+          tokenId: entity1.tokenId,
+        },
+        entity2: {
+          name: entity2.name,
+          isStarter: entity2.isStarter,
+          tokenId: entity2.tokenId,
+        },
+      });
+
+      if (!gameState.address || mergeInProgress) {
+        console.log("❌ [MERGE FLOW] Merge blocked:", {
+          hasAddress: !!gameState.address,
+          mergeInProgress,
+        });
+        return;
+      }
 
       setMergeInProgress(true);
       setGameState((prev) => ({ ...prev, error: null }));
 
       try {
-        console.log(
-          `Requesting merge for entities ${entity1.name} and ${entity2.name}`
-        );
+        console.log("📝 [MERGE FLOW] Validating entities...");
 
         // Validate entities
         if (!entity1 || !entity2) {
+          console.log("❌ [MERGE FLOW] Entity validation failed:", {
+            entity1Exists: !!entity1,
+            entity2Exists: !!entity2,
+          });
           throw new Error("One or both selected entities not found");
         }
 
@@ -446,14 +469,26 @@ export function useGame() {
           !entity2.isStarter &&
           entity1.tokenId === entity2.tokenId
         ) {
+          console.log("❌ [MERGE FLOW] Same entity error:", {
+            entity1Name: entity1.name,
+            entity2Name: entity2.name,
+            entity1TokenId: entity1.tokenId,
+            entity2TokenId: entity2.tokenId,
+          });
           throw new Error("Cannot merge an entity with itself");
         }
 
+        console.log("✅ [MERGE FLOW] Entity validation passed");
+
         // Check if player can merge (cooldown check)
+        console.log("⏰ [MERGE FLOW] Checking merge cooldown...");
         const canMerge = await contractService.canPlayerMerge(
           gameState.address
         );
+        console.log("🔍 [MERGE FLOW] Cooldown check result:", { canMerge });
+
         if (!canMerge) {
+          console.log("❌ [MERGE FLOW] Cooldown active");
           throw new Error(
             "Merge cooldown active. Please wait before requesting another merge."
           );
@@ -463,9 +498,19 @@ export function useGame() {
         const entity1TokenId = entity1.isStarter ? 0 : entity1.tokenId;
         const entity2TokenId = entity2.isStarter ? 0 : entity2.tokenId;
 
+        console.log("📦 [MERGE FLOW] Prepared contract parameters:", {
+          entity1Name: entity1.name,
+          entity2Name: entity2.name,
+          entity1IsStarter: entity1.isStarter,
+          entity2IsStarter: entity2.isStarter,
+          entity1TokenId,
+          entity2TokenId,
+        });
+
         // Initiate merge transaction via contract
+        console.log("🔗 [MERGE FLOW] Initiating blockchain transaction...");
         console.log(
-          `Initiating merge transaction for entities ${entity1.name} (starter: ${entity1.isStarter}) and ${entity2.name} (starter: ${entity2.isStarter})`
+          `🔗 [MERGE FLOW] Transaction details: ${entity1.name} (starter: ${entity1.isStarter}) + ${entity2.name} (starter: ${entity2.isStarter})`
         );
 
         const txResult = await contractService.requestMerge(
@@ -476,48 +521,81 @@ export function useGame() {
           entity1TokenId,
           entity2TokenId
         );
-        console.log("Merge transaction successful:", txResult);
+        console.log(
+          "✅ [MERGE FLOW] Blockchain transaction successful:",
+          txResult
+        );
 
         // Reload data to get the new pending request
+        console.log("🔄 [MERGE FLOW] Reloading player data...");
         await loadPlayerData(gameState.address);
+        console.log("✅ [MERGE FLOW] Player data reloaded");
 
         // Start auto-finalization for the newest pending request
-        // The requestId is typically the latest one after refresh
+        console.log("🤖 [MERGE FLOW] Setting up auto-finalization...");
         setTimeout(async () => {
           try {
-            // Get updated pending requests
+            console.log("🔍 [MERGE FLOW] Fetching updated pending requests...");
             const response = await fetch(
               `/api/game/entities?address=${gameState.address}`
             );
             const data = await response.json();
+
+            console.log("📊 [MERGE FLOW] Updated game state:", {
+              success: data.success,
+              pendingRequestsCount: data.pendingRequests?.length || 0,
+              pendingRequests: data.pendingRequests,
+            });
+
             if (data.success && data.pendingRequests?.length > 0) {
-              // Auto-finalize the most recent request ONLY if not already auto-finalizing
-              const latestRequestId = Math.max(...data.pendingRequests);
+              const latestRequestId = BigInt(Math.max(...data.pendingRequests));
+              console.log(
+                "🎯 [MERGE FLOW] Latest request ID:",
+                latestRequestId.toString()
+              );
+
               if (!autoFinalizingRequests.has(latestRequestId)) {
                 console.log(
-                  `🚀 Starting auto-finalization for request ${latestRequestId}`
+                  `🚀 [MERGE FLOW] Starting auto-finalization for request ${latestRequestId}`
                 );
-                // Pass entity names to start hatch timer
                 autoFinalizeMerge(latestRequestId, entity1.name, entity2.name);
               } else {
                 console.log(
-                  `⏭️ Request ${latestRequestId} already being auto-finalized, skipping`
+                  `⏭️ [MERGE FLOW] Request ${latestRequestId} already being auto-finalized, skipping`
                 );
               }
+            } else {
+              console.log(
+                "⚠️ [MERGE FLOW] No pending requests found after merge"
+              );
             }
           } catch (error) {
-            console.error("Failed to start auto-finalization:", error);
+            console.error(
+              "❌ [MERGE FLOW] Failed to start auto-finalization:",
+              error
+            );
           }
-        }, 1000); // Small delay to ensure data is loaded
+        }, 1000);
 
+        console.log(
+          "🎉 [MERGE FLOW] Merge request completed successfully:",
+          txResult
+        );
         return txResult;
       } catch (error: any) {
-        console.error("Merge request failed:", error);
+        console.error("❌ [MERGE FLOW] Merge request failed:", error);
+        console.log("🔍 [MERGE FLOW] Error details:", {
+          message: error.message,
+          code: error.code,
+          data: error.data,
+          reason: error.reason,
+        });
 
         // Provide more specific error messages
         let errorMessage = error.message || "Failed to request merge";
 
         if (error.message.includes("execution reverted")) {
+          console.log("⚠️ [MERGE FLOW] Smart contract execution reverted");
           if (error.data === "0x1f6a65b6") {
             errorMessage =
               "Merge request failed. Please ensure you own both entities and the merge cooldown has passed.";
@@ -526,11 +604,15 @@ export function useGame() {
               "Smart contract execution failed. Please check your entity ownership and try again.";
           }
         } else if (error.message.includes("user rejected")) {
+          console.log("👤 [MERGE FLOW] User rejected transaction");
           errorMessage = "Transaction was cancelled by user.";
         } else if (error.message.includes("insufficient funds")) {
+          console.log("💰 [MERGE FLOW] Insufficient funds for gas");
           errorMessage =
             "Insufficient ETH for gas fees. Please add funds to your wallet.";
         }
+
+        console.log("📝 [MERGE FLOW] Final error message:", errorMessage);
 
         setGameState((prev) => ({
           ...prev,
@@ -538,6 +620,7 @@ export function useGame() {
         }));
         throw error;
       } finally {
+        console.log("🏁 [MERGE FLOW] Cleaning up merge in progress state");
         setMergeInProgress(false);
       }
     },

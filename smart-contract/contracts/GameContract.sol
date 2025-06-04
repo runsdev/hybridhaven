@@ -10,7 +10,7 @@ contract GameContract is Ownable, ReentrancyGuard {
     NFTContract public nftContract;
     ChainlinkVRFConsumer public vrfConsumer;
     
-    struct MergeRequest {
+    struct Request {
         address player;
         string entity1Name;  // Name of first entity (starter or hybrid)
         string entity2Name;  // Name of second entity (starter or hybrid)
@@ -24,7 +24,7 @@ contract GameContract is Ownable, ReentrancyGuard {
     }
     
     // Mapping from VRF request ID to merge request
-    mapping(uint256 => MergeRequest) public mergeRequests;
+    mapping(uint256 => Request) public mergeRequests;
     
     // Mapping from player to their pending merge requests
     mapping(address => uint256[]) public playerPendingRequests;
@@ -85,10 +85,10 @@ contract GameContract is Ownable, ReentrancyGuard {
     }
     
     // Modifier to check if caller is backend or owner
-    modifier onlyBackendOrOwner() {
-        require(msg.sender == backendAddress || msg.sender == owner(), "Not authorized");
-        _;
-    }
+    // modifier onlyBackendOrOwner() {
+    //     require(msg.sender == backendAddress || msg.sender == owner(), "Not authorized");
+    //     _;
+    // }
     
     // Check if a string is a valid starter entity name
     function isValidStarterEntity(string memory name) public view returns (bool) {
@@ -137,11 +137,14 @@ contract GameContract is Ownable, ReentrancyGuard {
             NFTContract.Entity memory entity2 = nftContract.getEntity(entity2TokenId);
             entity2Name = entity2.name;
         }
+        
+        // Send ETH to contract owner
+        payable(owner()).transfer(msg.value);
             
         uint256 requestId = vrfConsumer.requestRandomWords(true);
         
         // Store merge request
-        mergeRequests[requestId] = MergeRequest({
+        mergeRequests[requestId] = Request({
             player: msg.sender,
             entity1Name: entity1Name,
             entity2Name: entity2Name,
@@ -165,9 +168,9 @@ contract GameContract is Ownable, ReentrancyGuard {
     function completeMerge(
         uint256 requestId,
         string memory newEntityName,
-        string memory imageURI
+        string memory metadataURI
     ) external {
-        MergeRequest storage request = mergeRequests[requestId];
+        Request storage request = mergeRequests[requestId];
         require(request.player != address(0), "Invalid request ID");
         require(!request.fulfilled, "Request already fulfilled");
         
@@ -185,7 +188,7 @@ contract GameContract is Ownable, ReentrancyGuard {
             request.player,
             newEntityName,
             rarity,
-            imageURI,
+            metadataURI,
             request.entity1Name,
             request.entity2Name
         );
@@ -221,7 +224,7 @@ contract GameContract is Ownable, ReentrancyGuard {
     }
     
     // Get merge request details
-    function getMergeRequest(uint256 requestId) external view returns (MergeRequest memory) {
+    function getMergeRequest(uint256 requestId) external view returns (Request memory) {
         return mergeRequests[requestId];
     }
     
@@ -246,7 +249,7 @@ contract GameContract is Ownable, ReentrancyGuard {
     
     // Emergency function to cancel stuck requests (owner only)
     function cancelMergeRequest(uint256 requestId) external onlyOwner {
-        MergeRequest storage request = mergeRequests[requestId];
+        Request storage request = mergeRequests[requestId];
         require(request.player != address(0), "Invalid request ID");
         require(!request.fulfilled, "Request already fulfilled");
         require(block.timestamp > request.timestamp + 3600, "Request too recent"); // 1 hour minimum

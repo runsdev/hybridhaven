@@ -1,0 +1,9 @@
+{
+  "vrfConsumer": "0x258cBa41e9c7d1a48A024b59B3350d9B0ee048aa",
+  "nftContract": "0xC2f8eAc3D7917815D74eA353bD9F9952f940D6f4",
+  "gameContract": "0xcF662f9022d8bE793ECb8344b6FC065e2BE3a5D7",
+  "network": "sepolia",
+  "deployer": "0x698cAA301eB22880a0F2A75bf45C3887145C21dD",
+  "timestamp": "2025-06-04T04:35:38.328Z",
+  "vrfSubscriptionId": "1.0743248137844086e+76"
+}

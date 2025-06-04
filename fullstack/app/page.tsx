@@ -81,7 +81,7 @@ export default function HybridHaven() {
 
   const handleEntityClick = (entity: Entity) => {
     if (isMergeMode) {
-      // If in merge mode, handle selection using proper identifier
+      // Use name for starters, tokenId for hybrids
       const identifier = entity.isStarter ? entity.name : entity.tokenId;
       handleEntitySelect(identifier);
     } else {
@@ -123,7 +123,6 @@ export default function HybridHaven() {
         setTimeout(() => setShowSuccess(null), 8000);
       } catch (error) {
         console.error("Merge failed:", error);
-        // Error is handled by the hook
       }
     }
   };
@@ -474,52 +473,34 @@ export default function HybridHaven() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {gameState.entities.map((entity, index) => (
-                <EntityCard
-                  key={
-                    entity.isStarter
-                      ? `starter-${entity.name}-${index}`
-                      : entity.tokenId
-                  }
-                  entity={entity}
-                  selected={selectedEntities.includes(entity.tokenId)}
-                  onSelect={() => handleEntitySelect(entity.tokenId)}
-                  canSelect={
-                    isMergeMode &&
-                    gameState.entities.length >= 2 &&
-                    !mergeInProgress
-                  }
-                  onClick={handleEntityClick}
-                />
-              ))}
+              {gameState.entities.map((entity, index) => {
+                // Create proper identifier for each entity
+                const entityIdentifier = entity.isStarter
+                  ? entity.name
+                  : entity.tokenId;
+
+                return (
+                  <EntityCard
+                    key={
+                      entity.isStarter
+                        ? `starter-${entity.name}-${index}`
+                        : entity.tokenId
+                    }
+                    entity={entity}
+                    selected={selectedEntities.includes(entityIdentifier)}
+                    onSelect={() => handleEntitySelect(entityIdentifier)}
+                    canSelect={
+                      isMergeMode &&
+                      gameState.entities.length >= 2 &&
+                      !mergeInProgress
+                    }
+                    onClick={handleEntityClick}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
-
-        {/* Hatch Timers - Active VRF Requests */}
-        {Array.from(hatchTimers.values()).length > 0 && (
-          <div className="mt-8 space-y-4">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-              🥚 Hatching in Progress
-              <span className="ml-2 text-sm text-gray-400 font-normal">
-                ({Array.from(hatchTimers.values()).length} active)
-              </span>
-            </h3>
-            <div className="grid gap-4">
-              {Array.from(hatchTimers.values()).map((timer) => (
-                <HatchTimerComponent
-                  key={timer.requestId}
-                  requestId={timer.requestId}
-                  entity1Name={timer.entity1Name}
-                  entity2Name={timer.entity2Name}
-                  startTime={timer.startTime}
-                  stage={timer.stage}
-                  onComplete={timer.onComplete}
-                />
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Legacy Pending Requests (fallback for requests without hatch timers) */}
         {gameState.pendingRequests.length > 0 &&
@@ -772,6 +753,8 @@ function EntityDetailsModal({
 
   // Fetch both IPFS and OpenSea metadata when modal opens
   useEffect(() => {
+    let cancelled = false;
+
     const fetchMetadata = async () => {
       if (entity.isStarter) return;
 
@@ -786,39 +769,69 @@ function EntityDetailsModal({
               `/api/metadata/${entity.tokenId}`
             );
             const openSeaData = await openSeaResponse.json();
-            if (!openSeaData.error) {
+            if (!cancelled && !openSeaData.error) {
               setOpenSeaMetadata(openSeaData);
             }
           } catch (error) {
-            console.warn("Could not fetch OpenSea metadata:", error);
+            if (!cancelled) {
+              console.warn("Could not fetch OpenSea metadata:", error);
+            }
           }
         }
 
         // Fetch IPFS key-value metadata if available
         if (entity.imageURI) {
           try {
-            const ipfsHash = entity.imageURI.replace("ipfs://", "");
+            // Extract CID from entity.imageURI (could be ipfs:// or https:// URL)
+            let cid = entity.imageURI;
+
+            // If it's an ipfs:// URI, extract the hash
+            if (cid.startsWith("ipfs://")) {
+              cid = cid.replace("ipfs://", "");
+            }
+            // If it's an HTTPS URL, extract the CID from the path
+            else if (cid.startsWith("http")) {
+              const matches = cid.match(/\/ipfs\/([a-zA-Z0-9]+)/);
+              if (matches && matches[1]) {
+                cid = matches[1];
+              } else {
+                console.warn("Could not extract CID from URL:", cid);
+                return; // Skip IPFS metadata fetch if we can't extract CID
+              }
+            }
+
             const ipfsResponse = await fetch(
-              `/api/game/metadata?cid=${encodeURIComponent(ipfsHash)}`
+              `/api/game/metadata?cid=${encodeURIComponent(cid)}`
             );
             const ipfsData = await ipfsResponse.json();
-            if (ipfsData.success) {
+            if (!cancelled && ipfsData.success) {
               setIpfsMetadata(ipfsData.metadata);
             }
           } catch (error) {
-            console.warn("Could not fetch IPFS metadata:", error);
+            if (!cancelled) {
+              console.warn("Could not fetch IPFS metadata:", error);
+            }
           }
         }
       } catch (error: any) {
-        console.error("Error fetching metadata:", error);
-        setMetadataError("Failed to load metadata");
+        if (!cancelled) {
+          console.error("Error fetching metadata:", error);
+          setMetadataError("Failed to load metadata");
+        }
       } finally {
-        setMetadataLoading(false);
+        if (!cancelled) {
+          setMetadataLoading(false);
+        }
       }
     };
 
     fetchMetadata();
-  }, [entity.imageURI, entity.isStarter, entity.tokenId]);
+
+    // Cleanup function to prevent state updates if component unmounts
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Use stable primitive values as dependencies
 
   const getRarityStars = (rarity: number) => "⭐".repeat(rarity);
 
@@ -846,7 +859,9 @@ function EntityDetailsModal({
   // Use OpenSea metadata if available, fallback to IPFS or entity data
   const displayMetadata = openSeaMetadata || ipfsMetadata;
   const displayDescription = displayMetadata?.description || entity.description;
-  const displayImage = displayMetadata?.image || entity.imageURI;
+  const displayImage = displayMetadata?.image;
+
+  console.log(displayImage);
 
   // OpenSea marketplace URL
   const openSeaUrl =
@@ -856,7 +871,7 @@ function EntityDetailsModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 space-y-6">
           {/* Header */}
           <div className="flex justify-between items-start">
@@ -885,31 +900,20 @@ function EntityDetailsModal({
 
           {/* Image */}
           <div className="aspect-square bg-gray-800 rounded-lg overflow-hidden">
-            {displayImage ? (
+            {entity.imageURI && entity.imageURI !== "" ? (
               <img
-                src={
-                  displayImage.startsWith("ipfs://")
-                    ? `https://gateway.pinata.cloud/ipfs/${displayImage.replace(
-                        "ipfs://",
-                        ""
-                      )}`
-                    : displayImage
-                }
+                src={formatIPFSUrl(entity.imageURI)}
                 alt={entity.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.src = "/placeholder-entity.png";
+                  // Fallback to emoji if image fails to load
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget
+                    .nextElementSibling as HTMLElement;
+                  if (fallback) fallback.style.display = "flex";
                 }}
               />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-500">
-                <div className="text-center">
-                  <div className="text-6xl mb-4">🔮</div>
-                  <p>No image available</p>
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
 
           {/* Description */}
