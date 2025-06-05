@@ -125,6 +125,7 @@ export default function HybridHaven() {
 
         await requestMerge(entity1, entity2);
         setSelectedEntities([]);
+        setIsMergeMode(false); // Exit merge mode after successful merge
         setShowSuccess(
           "🚀 Merge request submitted! Your hybrid is being created automatically and will appear shortly."
         );
@@ -769,37 +770,130 @@ export default function HybridHaven() {
           )}
       </div>
 
-      {/* Sticky Fusion Laboratory - Bottom Right */}
+      {/* Sticky Fusion Laboratory - Enhanced Design */}
       {gameState.entities.length >= 2 && (
         <div className="fixed bottom-6 right-6 z-50">
-          <div className="bg-black/90 backdrop-blur-lg border border-fuchsia-500/50 rounded-2xl p-4 shadow-2xl shadow-fuchsia-500/20 max-w-xs">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-bold text-fuchsia-300 flex items-center">
-                <span className="mr-1">⚡</span>
-                FUSION
-              </h3>
-              <div className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
+          {/* Pulsing glow effect */}
+          <div className="absolute inset-0 bg-gradient-to-r from-fuchsia-500/30 to-cyan-500/30 rounded-3xl blur-xl animate-pulse"></div>
+
+          <div className="relative bg-gradient-to-br from-gray-900/95 via-black/95 to-purple-900/95 backdrop-blur-xl border-2 border-fuchsia-400/60 rounded-3xl p-6 shadow-2xl shadow-fuchsia-500/40 max-w-sm transform hover:scale-105 transition-all duration-300">
+            {/* Header with animation */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin text-2xl">⚡</div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-fuchsia-300 to-cyan-300 bg-clip-text text-transparent">
+                  FUSION LAB
+                </h3>
+              </div>
+              <div
+                className={`text-sm px-3 py-1 rounded-full font-bold transition-all duration-300 ${
+                  selectedEntities.length === 2
+                    ? "bg-green-500/20 text-green-300 border border-green-400/50 animate-pulse"
+                    : "bg-fuchsia-900/30 text-fuchsia-300 border border-fuchsia-400/30"
+                }`}
+              >
                 {selectedEntities.length}/2
               </div>
             </div>
 
+            {/* Info text */}
+            <div className="mb-4 text-xs text-cyan-200 bg-cyan-900/20 border border-cyan-500/30 rounded-xl p-3 leading-relaxed">
+              {selectedEntities.length === 0 && (
+                <>
+                  <div className="flex items-center mb-2">
+                    <span className="text-yellow-400 mr-2">💡</span>
+                    <span className="font-semibold text-yellow-300">
+                      How to use:
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-cyan-200">
+                    <div>1. Click "SELECT" to enter fusion mode</div>
+                    <div>2. Choose any 2 entities to combine</div>
+                    <div>3. Create unique AI-generated hybrids!</div>
+                  </div>
+                </>
+              )}
+              {selectedEntities.length === 1 && (
+                <>
+                  <div className="flex items-center mb-2">
+                    <span className="text-orange-400 mr-2">🎯</span>
+                    <span className="font-semibold text-orange-300">
+                      Select one more:
+                    </span>
+                  </div>
+                  <div className="text-cyan-200">
+                    Choose another entity to complete the fusion process
+                  </div>
+                </>
+              )}
+              {selectedEntities.length === 2 && (
+                <>
+                  <div className="flex items-center mb-2">
+                    <span className="text-green-400 mr-2">🚀</span>
+                    <span className="font-semibold text-green-300">
+                      Ready to fuse!
+                    </span>
+                  </div>
+                  <div className="text-green-200">
+                    Your hybrid will be generated with AI artwork and unique
+                    traits
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Selected entities display */}
             {selectedEntities.length > 0 && (
-              <div className="mb-3 text-xs text-fuchsia-200 font-mono bg-fuchsia-900/20 border border-fuchsia-500/30 rounded-lg px-2 py-1">
-                #{selectedEntities.join(", #")}
+              <div className="mb-4">
+                <div className="text-xs text-fuchsia-300 font-semibold mb-2 flex items-center">
+                  <span className="mr-1">🔮</span>
+                  SELECTED ENTITIES:
+                </div>
+                <div className="space-y-2">
+                  {selectedEntities.map((entityId, index) => {
+                    const entity = gameState.entities.find((e) =>
+                      e.isStarter ? e.name === entityId : e.tokenId === entityId
+                    );
+                    return (
+                      <div
+                        key={entityId}
+                        className="text-xs bg-purple-900/30 border border-purple-500/40 rounded-lg px-3 py-2 flex items-center justify-between"
+                      >
+                        <span className="text-purple-200 font-mono">
+                          {entity?.isStarter ? "🌟" : "🔮"}{" "}
+                          {entity?.name || `#${entityId}`}
+                        </span>
+                        <span className="text-purple-400 font-bold">
+                          #{index + 1}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               {/* Merge Mode Toggle */}
               <button
                 onClick={toggleMergeMode}
-                className={`w-full text-xs font-bold py-2 px-3 rounded-xl transition-all duration-300 border ${
+                className={`w-full font-bold py-3 px-4 rounded-xl transition-all duration-300 border-2 shadow-lg transform hover:scale-105 ${
                   isMergeMode
-                    ? "bg-red-600/80 hover:bg-red-500/80 text-white border-red-400/50"
-                    : "bg-purple-600/80 hover:bg-purple-500/80 text-white border-purple-400/50"
+                    ? "bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white border-red-400/50 shadow-red-500/30"
+                    : "bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 text-white border-purple-400/50 shadow-purple-500/30"
                 }`}
               >
-                {isMergeMode ? "❌ EXIT" : "⚙️ SELECT"}
+                {isMergeMode ? (
+                  <span className="flex items-center justify-center">
+                    <span className="mr-2">❌</span>
+                    EXIT FUSION MODE
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center">
+                    <span className="mr-2">⚙️</span>
+                    ENTER FUSION MODE
+                  </span>
+                )}
               </button>
 
               {/* Action Buttons */}
@@ -807,9 +901,9 @@ export default function HybridHaven() {
                 {selectedEntities.length > 0 && (
                   <button
                     onClick={() => setSelectedEntities([])}
-                    className="flex-1 text-xs text-gray-300 hover:text-cyan-300 hover:bg-cyan-500/20 rounded-xl px-2 py-2 transition-all duration-300 border border-gray-600/30 hover:border-cyan-500/30"
+                    className="flex-1 text-gray-300 hover:text-cyan-300 hover:bg-cyan-500/20 rounded-xl px-3 py-2 transition-all duration-300 border border-gray-600/30 hover:border-cyan-500/30 font-medium"
                   >
-                    CLEAR
+                    🗑️ CLEAR
                   </button>
                 )}
 
@@ -817,17 +911,31 @@ export default function HybridHaven() {
                   <button
                     onClick={handleMerge}
                     disabled={gameState.loading || mergeInProgress}
-                    className="flex-1 bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 disabled:opacity-50 text-white font-bold text-xs py-2 px-3 rounded-xl transition-all duration-300"
+                    className="flex-1 bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 disabled:opacity-50 text-white font-bold py-2 px-4 rounded-xl transition-all duration-300 shadow-lg shadow-fuchsia-500/30 transform hover:scale-105 disabled:hover:scale-100"
                   >
                     {mergeInProgress ? (
                       <span className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-3 w-3 border-b border-white mr-1"></div>
-                        FUSE
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        FUSING...
                       </span>
                     ) : (
-                      "🔮 FUSE"
+                      <span className="flex items-center justify-center">
+                        <span className="mr-2">🔮</span>
+                        START FUSION
+                      </span>
                     )}
                   </button>
+                )}
+              </div>
+
+              {/* Additional info */}
+              <div className="text-xs text-center text-gray-400 font-mono bg-black/30 rounded-lg p-2 border border-gray-600/30">
+                {selectedEntities.length === 2 ? (
+                  <span className="text-green-400">
+                    ✨ Fusion creates unique AI-generated artwork
+                  </span>
+                ) : (
+                  <span>💎 Each fusion costs gas + creates an NFT</span>
                 )}
               </div>
             </div>

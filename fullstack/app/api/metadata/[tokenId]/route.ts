@@ -2,7 +2,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createBackendContractService } from "@/lib/contracts";
-import { formatIPFSUrl } from "@/lib/utils";
 
 // GET /api/metadata/[tokenId] - OpenSea compatible metadata endpoint
 export async function GET(
@@ -213,9 +212,13 @@ function calculateGenerationCode(
   parent2: string
 ): string {
   if (isStarter) return "G0";
-  const p1Gen = parent1.startsWith("G") ? parseInt(parent1.slice(1)) : 0;
-  const p2Gen = parent2.startsWith("G") ? parseInt(parent2.slice(1)) : 0;
-  return `F${Math.max(p1Gen, p2Gen) + 1}`;
+
+  // Extract generation numbers from both F and G prefixed codes
+  const p1Gen = extractGenerationNumber(parent1);
+  const p2Gen = extractGenerationNumber(parent2);
+
+  const nextGen = Math.max(p1Gen, p2Gen) + 1;
+  return `F${nextGen}`;
 }
 
 function calculateGenerationLevel(
@@ -224,9 +227,12 @@ function calculateGenerationLevel(
   parent2: string
 ): number {
   if (isStarter) return 0;
-  const p1Gen = parent1.startsWith("G") ? parseInt(parent1.slice(1)) : 0;
-  const p2Gen = parent2.startsWith("G") ? parseInt(parent2.slice(1)) : 0;
-  return Math.max(p1Gen, p2Gen);
+
+  // Extract generation numbers from both F and G prefixed codes
+  const p1Gen = extractGenerationNumber(parent1);
+  const p2Gen = extractGenerationNumber(parent2);
+
+  return Math.max(p1Gen, p2Gen) + 1; // Add 1 for the next generation level
 }
 
 function getLineageDescription(
@@ -235,9 +241,30 @@ function getLineageDescription(
   parent2: string
 ): string {
   if (isStarter) return "Pure Starter";
+
   const types = [];
-  if (parent1.startsWith("G")) types.push("Genetic");
-  if (parent2.startsWith("G")) types.push("Genetic");
+
+  // Check for both G (starter) and F (bred) generations
+  if (parent1.startsWith("G") || parent1.startsWith("F")) {
+    types.push(parent1.startsWith("G") ? "Pure Genetic" : "Bred Genetic");
+  }
+
+  if (parent2.startsWith("G") || parent2.startsWith("F")) {
+    types.push(parent2.startsWith("G") ? "Pure Genetic" : "Bred Genetic");
+  }
+
   if (types.length === 0) types.push("Hybrid");
-  return types.join(" / ");
+
+  // Remove duplicates and join
+  return [...new Set(types)].join(" / ");
+}
+
+// Helper function to extract generation numbers from codes
+function extractGenerationNumber(code: string): number {
+  if (code.startsWith("G") || code.startsWith("F")) {
+    const numStr = code.slice(1);
+    const num = parseInt(numStr);
+    return isNaN(num) ? 0 : num;
+  }
+  return 0;
 }
