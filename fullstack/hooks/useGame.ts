@@ -233,13 +233,13 @@ export function useGame() {
         const maxAttempts = Math.ceil(VRF_MAX_WAIT_TIME / VRF_POLL_INTERVAL);
 
         if (attempt >= maxAttempts) {
-          console.log(
-            `⏰ VRF timeout for request ${requestId} after ${VRF_MAX_WAIT_TIME}s`
-          );
-          setGameState((prev) => ({
-            ...prev,
-            error: `VRF request ${requestId} timed out. Please try manual finalization.`,
-          }));
+          // console.log(
+          //   `⏰ VRF timeout for request ${requestId} after ${VRF_MAX_WAIT_TIME}s`
+          // );
+          // setGameState((prev) => ({
+          //   ...prev,
+          //   error: `VRF request ${requestId} timed out. Please try manual finalization.`,
+          // }));
           return;
         }
 
@@ -259,7 +259,7 @@ export function useGame() {
 
           const data = await response.json();
 
-          console.log(data);
+          console.log("rquest data:", data);
 
           if (data.success) {
             console.log(`✅ Merge ${requestId} finalized successfully:`, data);
