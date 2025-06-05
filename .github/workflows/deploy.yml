@@ -30,25 +30,40 @@ jobs:
         with:
           version: latest
 
-      - name: Install dependencies
+      - name: Install proposal dependencies
         run: pnpm install
         working-directory: ./proposal
 
-      - name: Build
+      - name: Build proposal
         run: pnpm run build --base /${{github.event.repository.name}}/proposal/
         working-directory: ./proposal
+
+      - name: Install report dependencies
+        run: pnpm install
+        working-directory: ./report
+
+      - name: Build report
+        run: pnpm run build --base /${{github.event.repository.name}}/report/
+        working-directory: ./report
+
+      - name: Create combined deployment directory
+        run: |
+          mkdir -p combined-dist
+          cp -r proposal/dist combined-dist/proposal
+          cp -r report/dist combined-dist/report
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: ./proposal/dist
+          path: ./combined-dist
 
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}proposal/
+      url: ${{ steps.deployment.outputs.page_url }}
     needs: build
     runs-on: ubuntu-latest
     name: Deploy
