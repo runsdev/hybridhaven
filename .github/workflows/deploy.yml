@@ -35,7 +35,7 @@ jobs:
         working-directory: ./proposal
 
       - name: Build proposal
-        run: pnpm run build -- --base /${{github.event.repository.name}}/proposal/
+        run: pnpm run build
         working-directory: ./proposal
 
       - name: Install report dependencies
@@ -43,7 +43,7 @@ jobs:
         working-directory: ./report
 
       - name: Build report
-        run: pnpm run build -- --base /${{github.event.repository.name}}/report/
+        run: pnpm run build
         working-directory: ./report
 
       - name: Create combined deployment directory
