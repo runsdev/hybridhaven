@@ -35,7 +35,7 @@ jobs:
         working-directory: ./proposal
 
       - name: Build
-        run: pnpm run build --base /${{github.event.repository.name}}/
+        run: pnpm run build --base /${{github.event.repository.name}}/proposal/
         working-directory: ./proposal
 
       - name: Setup Pages
@@ -48,7 +48,7 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url }}/proposal/
     needs: build
     runs-on: ubuntu-latest
     name: Deploy
