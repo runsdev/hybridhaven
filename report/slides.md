@@ -46,6 +46,7 @@ mdc: true
 ## Platform Details
 - **Live URL**: https://hybridhaven.runs.my.id
 - **Network**: Ethereum Sepolia Testnet
+- **RPC**: Google Cloud RPC
 
 ## Core Features
 - Expandable entity collection
@@ -320,8 +321,8 @@ function requestRandomWords(
 ```
 
 Possible reentrancy in `ChainlinkVRFConsumer.requestRandomWords(bool)`
-ChainlinkVRFConsumer.sol(62, 9): Exploitable from `ChainlinkVRFConsumer.requestRandomWords(bool)`
-GameContract.sol(144, 9): Exploitable from `GameContract.requestMerge`
+ChainlinkVRFConsumer.sol: Exploitable from `ChainlinkVRFConsumer.requestRandomWords(bool)`
+GameContract.sol: Exploitable from `GameContract.requestMerge`
 
 `(string,string,bool,bool,uint256,uint256)`
 
