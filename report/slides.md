@@ -26,6 +26,10 @@ mdc: true
   <span class="px-3 py-1 cyber-card text-cyan-400 font-mono neon-text animate-float text-xs">
     Harun (23/514148/TK/56466)
   </span>
+
+  <span class="px-3 py-1 cyber-card text-cyan-400 font-mono neon-text animate-float text-xs">
+    Claude Sonnet 4
+  </span>
 </div>
 
 <div class="abs-br m-3 flex gap-1">
@@ -179,31 +183,71 @@ flowchart LR
 ---
 
 
-# Game Mechanics Flow
+# Test Results and Game Flow
 
 <div class="cyber-card p-3 text-xs">
 
 
-```mermaid {theme: 'dark', scale: 0.57}
-sequenceDiagram
-  actor P as Player
-  participant G as Game Contract
-  participant V as VRF Consumer
-  participant C as Chainlink VRF
-  participant A as AI Backend
-  participant I as IPFS Storage
-  
-  P->>G: Request Merge (0.0001 ETH)
-  G->>V: Request Random Number
-  V->>C: VRF Request
-  C->>V: Random Number
-  V->>G: Fulfill Request
-  G->>A: Generate Hybrid
-  A->>I: Store Metadata
-  I-->>A: Return IPFS Hash
-  A->>G: Return Metadata + Hash
-  G->>P: Mint NFT
-```
+<div class="grid grid-cols-2 gap-4">
+
+<div>
+<div class="text-[10px]">
+
+- **Deployment and Configuration**
+  - ✅ Should deploy with correct name and symbol
+  - ✅ Should have correct contract URI
+  - ✅ Should support required interfaces
+- **Entity Management**
+  - ✅ Should return correct entity details
+  - ✅ Should track token ownership correctly
+  - ✅ Should return correct total supply
+- **Contract Configuration**
+  - ✅ Should have correct initial configuration
+  - ✅ Should allow owner to update configuration
+  - ✅ Should reject zero addresses
+  - ✅ Should only allow owner to update configuration
+- **Starter Entities**
+  - ✅ Should return complete starter entities list
+  - ✅ Should validate starter entity names correctly
+- **Merge Cooldown System**
+  - ✅ Should allow merge when no previous merge
+  - ✅ Should enforce cooldown after merge
+  - ✅ Should allow merge after cooldown expires
+  - ✅ Should allow owner to update cooldown
+
+</div>
+</div>
+
+<div>
+<div class="text-[10px]">
+
+- **Merge Request Flow**
+  - ✅ Should require payment for merge
+  - ✅ Should require valid entity names
+  - ✅ Should prevent merging same starter entities
+  - ✅ Should create merge request successfully
+  - ✅ Should transfer payment to owner
+- **Merge Completion**
+  - ✅ Should check randomness availability
+  - ✅ Should complete merge successfully
+  - ✅ Should prevent double completion
+- **Integration Tests**
+  - ✅ Should complete full game workflow
+  - ✅ Should handle multiple players correctly
+  - ✅ Should handle VRF failures gracefully
+- **Rarity System**
+  - ✅ Should distribute rarities according to odds
+
+<div class="mt-2 text-center">
+<span class="text-green-400 font-mono animate-cyber-pulse">All 39 tests passing (8s)</span>
+</div>
+
+File: `hybridhaven/smart-contract/test/HybridHaven.test.ts`
+
+</div>
+</div>
+
+</div>
 
 
 </div>

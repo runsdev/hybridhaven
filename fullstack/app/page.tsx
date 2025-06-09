@@ -426,349 +426,394 @@ export default function HybridHaven() {
           </div>
         )}
 
-        {/* Entities Grid */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-cyan-300 flex items-center">
-              <span className="mr-2">📦</span>
-              NEURAL_COLLECTION
-              <span className="ml-2 text-xs text-fuchsia-400 bg-fuchsia-900/30 px-2 py-1 rounded-full">
-                ACTIVE
-              </span>
-            </h2>
+        {/* Main content with drawer spacing */}
+        <div
+          className={`transition-all duration-300 ${
+            gameState.pendingRequests.length > 0 ? "ml-96" : ""
+          }`}
+        >
+          {/* Entities Grid */}
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-cyan-300 flex items-center">
+                <span className="mr-2">📦</span>
+                NEURAL_COLLECTION
+                <span className="ml-2 text-xs text-fuchsia-400 bg-fuchsia-900/30 px-2 py-1 rounded-full">
+                  ACTIVE
+                </span>
+              </h2>
+              {gameState.entities.length > 0 && (
+                <div className="text-cyan-200 text-sm font-mono bg-black/40 border border-cyan-500/30 rounded-xl px-4 py-2 backdrop-blur-sm">
+                  STARTERS:{" "}
+                  {gameState.entities.filter((e) => e.isStarter).length} •
+                  HYBRIDS:{" "}
+                  {gameState.entities.filter((e) => !e.isStarter).length}
+                </div>
+              )}
+            </div>
+
+            {/* Filter and Search Controls */}
             {gameState.entities.length > 0 && (
-              <div className="text-cyan-200 text-sm font-mono bg-black/40 border border-cyan-500/30 rounded-xl px-4 py-2 backdrop-blur-sm">
-                STARTERS: {gameState.entities.filter((e) => e.isStarter).length}{" "}
-                • HYBRIDS:{" "}
-                {gameState.entities.filter((e) => !e.isStarter).length}
+              <div className="bg-black/40 backdrop-blur-lg border border-cyan-500/30 rounded-2xl p-6 shadow-lg shadow-cyan-500/10">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-cyan-300 flex items-center">
+                    <span className="mr-2">🔍</span>
+                    SEARCH_FILTERS
+                  </h3>
+                  <div className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
+                    {filteredEntities.length}/{gameState.entities.length}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Search Input */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
+                      Search
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Name, attributes..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white placeholder-gray-400 focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
+                      />
+                      {searchTerm && (
+                        <button
+                          onClick={() => setSearchTerm("")}
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-cyan-300 transition-colors"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Type Filter */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
+                      Type
+                    </label>
+                    <select
+                      value={selectedType}
+                      onChange={(e) => setSelectedType(e.target.value)}
+                      className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="starter">Starters</option>
+                      <option value="hybrid">Hybrids</option>
+                    </select>
+                  </div>
+
+                  {/* Rarity Filter */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
+                      Rarity
+                    </label>
+                    <select
+                      value={selectedRarity}
+                      onChange={(e) => setSelectedRarity(e.target.value)}
+                      className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
+                    >
+                      <option value="all">All Rarities</option>
+                      {availableRarities.map((rarity) => (
+                        <option key={rarity} value={rarity.toString()}>
+                          {getRarityName(rarity)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Sort By */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
+                      Sort By
+                    </label>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
+                    >
+                      <option value="newest">Newest First</option>
+                      <option value="oldest">Oldest First</option>
+                      <option value="name">Name (A-Z)</option>
+                      <option value="rarity">Rarity (High-Low)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Active Filters Display */}
+                {(searchTerm ||
+                  selectedType !== "all" ||
+                  selectedRarity !== "all" ||
+                  sortBy !== "newest") && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="flex flex-wrap gap-2">
+                      {searchTerm && (
+                        <span className="bg-cyan-900/30 border border-cyan-500/30 text-cyan-200 px-3 py-1 rounded-full text-xs">
+                          Search: "{searchTerm}"
+                        </span>
+                      )}
+                      {selectedType !== "all" && (
+                        <span className="bg-green-900/30 border border-green-500/30 text-green-200 px-3 py-1 rounded-full text-xs">
+                          Type:{" "}
+                          {selectedType === "starter" ? "Starters" : "Hybrids"}
+                        </span>
+                      )}
+                      {selectedRarity !== "all" && (
+                        <span className="bg-purple-900/30 border border-purple-500/30 text-purple-200 px-3 py-1 rounded-full text-xs">
+                          Rarity: {getRarityName(parseInt(selectedRarity))}
+                        </span>
+                      )}
+                      {sortBy !== "newest" && (
+                        <span className="bg-fuchsia-900/30 border border-fuchsia-500/30 text-fuchsia-200 px-3 py-1 rounded-full text-xs">
+                          Sort:{" "}
+                          {sortBy === "oldest"
+                            ? "Oldest"
+                            : sortBy === "name"
+                            ? "Name"
+                            : "Rarity"}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-xs text-gray-400 hover:text-cyan-300 hover:bg-cyan-500/20 rounded-xl px-3 py-1 transition-all duration-200 border border-gray-600/30 hover:border-cyan-500/30"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                )}
+
+                {/* No Results Message */}
+                {filteredEntities.length === 0 &&
+                  gameState.entities.length > 0 && (
+                    <div className="mt-4 text-center py-6 bg-yellow-900/20 border border-yellow-500/30 rounded-xl">
+                      <div className="text-3xl mb-2">🔍</div>
+                      <p className="text-yellow-200 font-mono">
+                        No entities match your filters
+                      </p>
+                      <button
+                        onClick={clearAllFilters}
+                        className="mt-2 text-xs text-yellow-300 hover:text-yellow-100 hover:bg-yellow-500/20 rounded-lg px-3 py-1 transition-all duration-200"
+                      >
+                        Clear filters to see all entities
+                      </button>
+                    </div>
+                  )}
+              </div>
+            )}
+
+            {/* Entity Display Section */}
+            {gameState.loading && gameState.entities.length === 0 ? (
+              <div className="text-center py-12 bg-black/20 backdrop-blur-lg border border-cyan-500/30 rounded-2xl">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+                <p className="text-cyan-200 text-lg font-mono">
+                  [LOADING_NEURAL_DATA...]
+                </p>
+              </div>
+            ) : gameState.entities.length === 0 ? (
+              <div className="text-center py-12 bg-black/20 backdrop-blur-lg border border-cyan-500/30 rounded-2xl">
+                <div className="text-6xl mb-4">🎯</div>
+                <p className="text-cyan-200 text-lg font-mono">
+                  [NO_ENTITIES_DETECTED]
+                  <br />
+                  <span className="text-sm text-fuchsia-300">
+                    {!hasStarterEntity
+                      ? "EXECUTE: Claim your starter collection above!"
+                      : "EXECUTE: Start merging to create new entities!"}
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Starter Entities - Compact List */}
+                {filteredStarters.length > 0 && (
+                  <div className="bg-black/40 backdrop-blur-lg border border-green-500/30 rounded-2xl p-6 shadow-lg shadow-green-500/10">
+                    <h3 className="text-xl font-bold text-green-300 mb-4 flex items-center">
+                      <span className="mr-2">🌟</span>
+                      STARTER_ENTITIES
+                      <span className="ml-2 text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
+                        {filteredStarters.length}
+                      </span>
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {filteredStarters.map((entity, index) => {
+                        const entityIdentifier = entity.name;
+                        const isSelected =
+                          selectedEntities.includes(entityIdentifier);
+
+                        return (
+                          <div
+                            key={`starter-${entity.name}-${index}`}
+                            className={`
+                              relative flex items-center space-x-3 p-3 rounded-xl transition-all duration-300 cursor-pointer border-2
+                              ${
+                                isSelected
+                                  ? "bg-cyan-500/20 border-cyan-400/70 shadow-lg shadow-cyan-400/30"
+                                  : "bg-green-900/20 border-green-500/30 hover:border-green-400/50 hover:bg-green-900/30"
+                              }
+                              ${
+                                isMergeMode &&
+                                gameState.entities.length >= 2 &&
+                                !mergeInProgress
+                                  ? "hover:scale-105"
+                                  : ""
+                              }
+                            `}
+                            onClick={() => {
+                              if (
+                                isMergeMode &&
+                                gameState.entities.length >= 2 &&
+                                !mergeInProgress
+                              ) {
+                                handleEntitySelect(entityIdentifier);
+                              } else {
+                                handleEntityClick(entity);
+                              }
+                            }}
+                            title={entity.name}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-white truncate">
+                                {entity.name}
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <div className="flex-shrink-0 bg-cyan-500 text-black rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                                ✓
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {isMergeMode && (
+                      <p className="text-green-200 text-xs mt-3 font-mono opacity-75">
+                        💡 Click starter entities to select them for fusion
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Hybrid Entities - Large Cards */}
+                {filteredHybrids.length > 0 && (
+                  <div>
+                    <h3 className="text-xl font-bold text-fuchsia-300 mb-4 flex items-center">
+                      <span className="mr-2">🔮</span>
+                      HYBRID_CREATURES
+                      <span className="ml-2 text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
+                        {filteredHybrids.length}
+                      </span>
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      {filteredHybrids.map((entity, index) => {
+                        const entityIdentifier = entity.tokenId;
+
+                        return (
+                          <EntityCard
+                            key={entity.tokenId}
+                            entity={entity}
+                            selected={selectedEntities.includes(
+                              entityIdentifier
+                            )}
+                            onSelect={() =>
+                              handleEntitySelect(entityIdentifier)
+                            }
+                            canSelect={
+                              isMergeMode &&
+                              gameState.entities.length >= 2 &&
+                              !mergeInProgress
+                            }
+                            onClick={handleEntityClick}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Filter and Search Controls */}
-          {gameState.entities.length > 0 && (
-            <div className="bg-black/40 backdrop-blur-lg border border-cyan-500/30 rounded-2xl p-6 shadow-lg shadow-cyan-500/10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-cyan-300 flex items-center">
-                  <span className="mr-2">🔍</span>
-                  SEARCH_FILTERS
+          {/* Hatch Timers - Legacy display (can be removed once PendingMergeList is fully integrated) */}
+          {Object.keys(hatchTimers).length > 0 &&
+            gameState.pendingRequests.length === 0 && (
+              <div className="mt-8 bg-black/40 backdrop-blur-lg border border-yellow-500/30 rounded-2xl p-6 shadow-lg shadow-yellow-500/10">
+                <h3 className="text-xl font-bold text-yellow-300 mb-4 flex items-center">
+                  <span className="mr-2">⏳</span>
+                  INCUBATION_CHAMBER
+                  <span className="ml-2 text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
+                    {Object.keys(hatchTimers).length}
+                  </span>
                 </h3>
-                <div className="text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
-                  {filteredEntities.length}/{gameState.entities.length}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Search Input */}
-                <div className="space-y-2">
-                  <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
-                    Search
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Name, attributes..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white placeholder-gray-400 focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
-                    />
-                    {searchTerm && (
-                      <button
-                        onClick={() => setSearchTerm("")}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-cyan-300 transition-colors"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Type Filter */}
-                <div className="space-y-2">
-                  <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
-                    Type
-                  </label>
-                  <select
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
-                  >
-                    <option value="all">All Types</option>
-                    <option value="starter">Starters</option>
-                    <option value="hybrid">Hybrids</option>
-                  </select>
-                </div>
-
-                {/* Rarity Filter */}
-                <div className="space-y-2">
-                  <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
-                    Rarity
-                  </label>
-                  <select
-                    value={selectedRarity}
-                    onChange={(e) => setSelectedRarity(e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
-                  >
-                    <option value="all">All Rarities</option>
-                    {availableRarities.map((rarity) => (
-                      <option key={rarity} value={rarity.toString()}>
-                        {getRarityName(rarity)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Sort By */}
-                <div className="space-y-2">
-                  <label className="text-xs text-cyan-300 font-mono uppercase tracking-wide">
-                    Sort By
-                  </label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-4 py-2 text-white focus:border-cyan-400/70 focus:ring-2 focus:ring-cyan-400/20 transition-all duration-200"
-                  >
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="name">Name (A-Z)</option>
-                    <option value="rarity">Rarity (High-Low)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Active Filters Display */}
-              {(searchTerm ||
-                selectedType !== "all" ||
-                selectedRarity !== "all" ||
-                sortBy !== "newest") && (
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="flex flex-wrap gap-2">
-                    {searchTerm && (
-                      <span className="bg-cyan-900/30 border border-cyan-500/30 text-cyan-200 px-3 py-1 rounded-full text-xs">
-                        Search: "{searchTerm}"
-                      </span>
-                    )}
-                    {selectedType !== "all" && (
-                      <span className="bg-green-900/30 border border-green-500/30 text-green-200 px-3 py-1 rounded-full text-xs">
-                        Type:{" "}
-                        {selectedType === "starter" ? "Starters" : "Hybrids"}
-                      </span>
-                    )}
-                    {selectedRarity !== "all" && (
-                      <span className="bg-purple-900/30 border border-purple-500/30 text-purple-200 px-3 py-1 rounded-full text-xs">
-                        Rarity: {getRarityName(parseInt(selectedRarity))}
-                      </span>
-                    )}
-                    {sortBy !== "newest" && (
-                      <span className="bg-fuchsia-900/30 border border-fuchsia-500/30 text-fuchsia-200 px-3 py-1 rounded-full text-xs">
-                        Sort:{" "}
-                        {sortBy === "oldest"
-                          ? "Oldest"
-                          : sortBy === "name"
-                          ? "Name"
-                          : "Rarity"}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={clearAllFilters}
-                    className="text-xs text-gray-400 hover:text-cyan-300 hover:bg-cyan-500/20 rounded-xl px-3 py-1 transition-all duration-200 border border-gray-600/30 hover:border-cyan-500/30"
-                  >
-                    Clear All
-                  </button>
-                </div>
-              )}
-
-              {/* No Results Message */}
-              {filteredEntities.length === 0 &&
-                gameState.entities.length > 0 && (
-                  <div className="mt-4 text-center py-6 bg-yellow-900/20 border border-yellow-500/30 rounded-xl">
-                    <div className="text-3xl mb-2">🔍</div>
-                    <p className="text-yellow-200 font-mono">
-                      No entities match your filters
-                    </p>
-                    <button
-                      onClick={clearAllFilters}
-                      className="mt-2 text-xs text-yellow-300 hover:text-yellow-100 hover:bg-yellow-500/20 rounded-lg px-3 py-1 transition-all duration-200"
+                <div className="space-y-3">
+                  {Object.entries(hatchTimers).map(([requestId, timeLeft]) => (
+                    <div
+                      key={requestId}
+                      className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-3 flex items-center justify-between"
                     >
-                      Clear filters to see all entities
-                    </button>
-                  </div>
-                )}
-            </div>
-          )}
-
-          {/* Entity Display Section */}
-          {gameState.loading && gameState.entities.length === 0 ? (
-            <div className="text-center py-12 bg-black/20 backdrop-blur-lg border border-cyan-500/30 rounded-2xl">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-              <p className="text-cyan-200 text-lg font-mono">
-                [LOADING_NEURAL_DATA...]
-              </p>
-            </div>
-          ) : gameState.entities.length === 0 ? (
-            <div className="text-center py-12 bg-black/20 backdrop-blur-lg border border-cyan-500/30 rounded-2xl">
-              <div className="text-6xl mb-4">🎯</div>
-              <p className="text-cyan-200 text-lg font-mono">
-                [NO_ENTITIES_DETECTED]
-                <br />
-                <span className="text-sm text-fuchsia-300">
-                  {!hasStarterEntity
-                    ? "EXECUTE: Claim your starter collection above!"
-                    : "EXECUTE: Start merging to create new entities!"}
-                </span>
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {/* Starter Entities - Compact List */}
-              {filteredStarters.length > 0 && (
-                <div className="bg-black/40 backdrop-blur-lg border border-green-500/30 rounded-2xl p-6 shadow-lg shadow-green-500/10">
-                  <h3 className="text-xl font-bold text-green-300 mb-4 flex items-center">
-                    <span className="mr-2">🌟</span>
-                    STARTER_ENTITIES
-                    <span className="ml-2 text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
-                      {filteredStarters.length}
-                    </span>
-                  </h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                    {filteredStarters.map((entity, index) => {
-                      const entityIdentifier = entity.name;
-                      const isSelected =
-                        selectedEntities.includes(entityIdentifier);
-
-                      return (
-                        <div
-                          key={`starter-${entity.name}-${index}`}
-                          className={`
-                            relative flex items-center space-x-3 p-3 rounded-xl transition-all duration-300 cursor-pointer border-2
-                            ${
-                              isSelected
-                                ? "bg-cyan-500/20 border-cyan-400/70 shadow-lg shadow-cyan-400/30"
-                                : "bg-green-900/20 border-green-500/30 hover:border-green-400/50 hover:bg-green-900/30"
-                            }
-                            ${
-                              isMergeMode &&
-                              gameState.entities.length >= 2 &&
-                              !mergeInProgress
-                                ? "hover:scale-105"
-                                : ""
-                            }
-                          `}
-                          onClick={() => {
-                            if (
-                              isMergeMode &&
-                              gameState.entities.length >= 2 &&
-                              !mergeInProgress
-                            ) {
-                              handleEntitySelect(entityIdentifier);
-                            } else {
-                              handleEntityClick(entity);
-                            }
-                          }}
-                          title={entity.name}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-white truncate">
-                              {entity.name}
-                            </div>
-                          </div>
-                          {isSelected && (
-                            <div className="flex-shrink-0 bg-cyan-500 text-black rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
-                              ✓
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {isMergeMode && (
-                    <p className="text-green-200 text-xs mt-3 font-mono opacity-75">
-                      💡 Click starter entities to select them for fusion
-                    </p>
-                  )}
+                      <span className="text-yellow-200 font-mono text-sm">
+                        REQUEST #{requestId.slice(0, 8)}...
+                      </span>
+                      <span className="text-yellow-300 font-bold">
+                        {timeLeft > 0 ? `${timeLeft}s` : "READY_TO_HATCH"}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              )}
-
-              {/* Hybrid Entities - Large Cards */}
-              {filteredHybrids.length > 0 && (
-                <div>
-                  <h3 className="text-xl font-bold text-fuchsia-300 mb-4 flex items-center">
-                    <span className="mr-2">🔮</span>
-                    HYBRID_CREATURES
-                    <span className="ml-2 text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
-                      {filteredHybrids.length}
-                    </span>
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {filteredHybrids.map((entity, index) => {
-                      const entityIdentifier = entity.tokenId;
-
-                      return (
-                        <EntityCard
-                          key={entity.tokenId}
-                          entity={entity}
-                          selected={selectedEntities.includes(entityIdentifier)}
-                          onSelect={() => handleEntitySelect(entityIdentifier)}
-                          canSelect={
-                            isMergeMode &&
-                            gameState.entities.length >= 2 &&
-                            !mergeInProgress
-                          }
-                          onClick={handleEntityClick}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
         </div>
+      </div>
 
-        {/* Pending Merges Section */}
-        {gameState.pendingRequests.length > 0 && (
-          <div className="mt-8">
-            <PendingMergeList
-              pendingRequests={gameState.pendingRequests}
-              hatchTimers={hatchTimers}
-              autoFinalizingRequests={autoFinalizingRequests}
-              onFinalize={finalizeMerge}
-              address={gameState.address!}
-              className="mb-6"
-            />
-          </div>
-        )}
+      {/* Left Drawer for Pending Merges */}
+      {gameState.pendingRequests.length > 0 && (
+        <>
+          {/* Drawer Overlay */}
+          <div
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden"
+            onClick={() => {
+              /* Could add drawer close functionality here */
+            }}
+          />
 
-        {/* Hatch Timers - Legacy display (can be removed once PendingMergeList is fully integrated) */}
-        {Object.keys(hatchTimers).length > 0 &&
-          gameState.pendingRequests.length === 0 && (
-            <div className="mt-8 bg-black/40 backdrop-blur-lg border border-yellow-500/30 rounded-2xl p-6 shadow-lg shadow-yellow-500/10">
-              <h3 className="text-xl font-bold text-yellow-300 mb-4 flex items-center">
-                <span className="mr-2">⏳</span>
-                INCUBATION_CHAMBER
-                <span className="ml-2 text-xs text-cyan-400 bg-cyan-900/30 px-2 py-1 rounded-full">
-                  {Object.keys(hatchTimers).length}
-                </span>
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(hatchTimers).map(([requestId, timeLeft]) => (
-                  <div
-                    key={requestId}
-                    className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-3 flex items-center justify-between"
-                  >
-                    <span className="text-yellow-200 font-mono text-sm">
-                      REQUEST #{requestId.slice(0, 8)}...
-                    </span>
-                    <span className="text-yellow-300 font-bold">
-                      {timeLeft > 0 ? `${timeLeft}s` : "READY_TO_HATCH"}
-                    </span>
-                  </div>
-                ))}
+          {/* Drawer Content */}
+          <div className="fixed left-0 top-20 bottom-0 w-96 bg-black/95 backdrop-blur-xl border-r border-yellow-500/40 shadow-2xl shadow-yellow-500/20 z-40 transform transition-transform duration-300 ease-in-out overflow-y-auto">
+            {/* Drawer Header */}
+            <div className="sticky top-0 bg-black/90 backdrop-blur-xl border-b border-yellow-500/30 p-4 z-10">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-yellow-300 flex items-center">
+                  <span className="mr-2">🧪</span>
+                  MERGE LABORATORY
+                </h2>
+                <div className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-1 rounded-full">
+                  {gameState.pendingRequests.length} ACTIVE
+                </div>
               </div>
             </div>
-          )}
-      </div>
+
+            {/* Drawer Body */}
+            <div className="p-4">
+              <PendingMergeList
+                pendingRequests={gameState.pendingRequests}
+                hatchTimers={hatchTimers}
+                autoFinalizingRequests={autoFinalizingRequests}
+                onFinalize={finalizeMerge}
+                address={gameState.address!}
+              />
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="sticky bottom-0 bg-black/90 backdrop-blur-xl border-t border-yellow-500/30 p-4">
+              <div className="text-xs text-yellow-400 text-center font-mono">
+                💡 Merges auto-complete when ready
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Sticky Fusion Laboratory - Enhanced Design */}
       {gameState.entities.length >= 2 && (
